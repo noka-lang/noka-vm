@@ -44,7 +44,9 @@ jobs:
           path: nokascript
 
       - name: Copy wasm into nokascript
-        run: cp vm.wasm nokascript/src/core/vm.wasm
+        run: |
+          mkdir -p nokascript/src/core
+          cp vm.wasm nokascript/src/core/vm.wasm
 
       - name: Open PR to nokascript
         uses: peter-evans/create-pull-request@v7
