@@ -1,0 +1,61 @@
+name: Release VM
+
+# Cut a release by pushing a version tag, e.g.:
+#   git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags:
+      - "v*"
+
+# Needed so the job can create a GitHub Release in THIS repo.
+permissions:
+  contents: write
+
+jobs:
+  build-and-ship:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out noka-vm
+        uses: actions/checkout@v4
+
+      - name: Set up Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          # Pinned to the dev build used locally. Dev versions can eventually be
+          # pruned from Zig's download index; if this 404s, bump it (zig version)
+          # or switch to `version: master`.
+          version: 0.17.0-dev.690+c5a61e899
+
+      - name: Build vm.wasm
+        run: sh build.sh
+
+      - name: Attach vm.wasm to the GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: vm.wasm
+
+      # Check out the downstream npm package so we can update its copy of the
+      # wasm. Uses a PAT because the default GITHUB_TOKEN only reaches this repo.
+      - name: Check out nokascript
+        uses: actions/checkout@v4
+        with:
+          repository: noka-lang/nokascript
+          token: ${{ secrets.NOKASCRIPT_PAT }}
+          path: nokascript
+
+      - name: Copy wasm into nokascript
+        run: cp vm.wasm nokascript/src/core/vm.wasm
+
+      - name: Open PR to nokascript
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.NOKASCRIPT_PAT }}
+          path: nokascript
+          branch: update-vm-wasm-${{ github.ref_name }}
+          delete-branch: true
+          commit-message: "Update vm.wasm to noka-vm ${{ github.ref_name }}"
+          title: "Update vm.wasm to noka-vm ${{ github.ref_name }}"
+          body: |
+            Automated update of the compiled VM core.
+
+            Built from noka-vm [`${{ github.ref_name }}`](https://github.com/noka-lang/noka-vm/releases/tag/${{ github.ref_name }}).

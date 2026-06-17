@@ -1,0 +1,4 @@
+.DS_Store
+
+# Compiled artifact — produced by build.sh / CI, shipped as a release asset.
+vm.wasm

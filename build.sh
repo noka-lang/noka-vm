@@ -1,6 +1,14 @@
 #!/usr/bin/env sh
-# Build the NokaScript VM core to WebAssembly and copy the artifact into the
-# nokascript package so the REPL can load it.
+# Build the NokaScript VM core to WebAssembly.
+#
+# Usage:
+#   sh build.sh           Build vm.wasm in this directory.
+#   sh build.sh --sync    Also copy it into a sibling nokascript checkout
+#                         (../nokascript/src/core/vm.wasm) for local testing.
+#
+# Releasing is automated: push a version tag and CI builds vm.wasm, attaches it
+# to a GitHub Release, and opens a PR into nokascript. See
+# .github/workflows/release.yml. You only need --sync for quick local iteration.
 
 set -e
 
@@ -16,7 +24,10 @@ zig build-exe "$here/vm.zig" \
   --export=scratch_cap \
   -femit-bin="$here/vm.wasm"
 
-# Ship it into the npm package next door.
-cp "$here/vm.wasm" "$here/../nokascript/vm.wasm"
+echo "built vm.wasm"
 
-echo "successfully built vm.wasm and copied to nokascript/"
+if [ "$1" = "--sync" ]; then
+  dest="$here/../nokascript/src/core/vm.wasm"
+  cp "$here/vm.wasm" "$dest"
+  echo "synced to $dest"
+fi

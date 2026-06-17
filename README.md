@@ -13,9 +13,18 @@ shipped inside the [`nokascript`](https://www.npmjs.com/package/nokascript) npm 
 
 ### Build
 ```sh
-sh build.sh
+sh build.sh          # compile vm.wasm here
+sh build.sh --sync   # compile and copy artifact into a sibling directory (for local testing)
 ```
 
-This compiles `vm.wasm` in the working directory and copies it to `../nokascript/vm.wasm`. 
+### Releasing
 
-> ⚠️ TODO: replace this with CI/CD automation!
+Shipping `vm.wasm` to [`nokascript`](https://github.com/noka-lang/nokascript) is
+automated. Push a version tag:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+CI will open a pull request into [`nokascript`](https://github.com/noka-lang/nokascript). Review and merge that PR to ship.
