@@ -21,18 +21,19 @@ jobs:
       - name: Set up Zig
         uses: mlugg/setup-zig@v2
         with:
-          # Pinned to the dev build used locally. Dev versions can eventually be
-          # pruned from Zig's download index; if this 404s, bump it (zig version)
-          # or switch to `version: master`.
-          version: 0.17.0-dev.690+c5a61e899
+          # Keep in sync with `minimum_zig_version` in build.zig.zon.
+          version: 0.16.0
+
+      - name: Run tests
+        run: zig build test
 
       - name: Build vm.wasm
-        run: sh build.sh
+        run: zig build wasm
 
       - name: Attach vm.wasm to the GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: vm.wasm
+          files: zig-out/vm.wasm
 
       # Check out the downstream npm package so we can update its copy of the
       # wasm. Uses a PAT because the default GITHUB_TOKEN only reaches this repo.
@@ -43,10 +44,10 @@ jobs:
           token: ${{ secrets.NOKASCRIPT_PAT }}
           path: nokascript
 
+      # `zig build sync` is the local equivalent of this step; here the
+      # checkout lives at ./nokascript rather than beside the repo.
       - name: Copy wasm into nokascript
-        run: |
-          mkdir -p nokascript/src/core
-          cp vm.wasm nokascript/src/core/vm.wasm
+        run: zig build sync -Dsync-dest=nokascript/src/core/vm.wasm
 
       - name: Open PR to nokascript
         uses: peter-evans/create-pull-request@v7

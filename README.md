@@ -12,10 +12,18 @@ shipped inside the [`nokascript`](https://www.npmjs.com/package/nokascript) npm 
 ---
 
 ### Build
+
+Requires Zig 0.16.0.
+
 ```sh
-sh build.sh          # compile vm.wasm here
-sh build.sh --sync   # compile and copy artifact into a sibling directory (for local testing)
+zig build                  # build the native debug runner (zig-out/bin/noka)
+zig build run -- '1 + 2'   # evaluate a program natively
+zig build test             # run the unit tests
+zig build wasm             # build the shipped artifact at zig-out/vm.wasm
 ```
+
+`zig build run` reads from stdin when given no argument, so `cat foo.noka | zig
+build run` works too.
 
 ### Releasing
 
