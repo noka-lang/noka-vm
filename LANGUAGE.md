@@ -1,7 +1,7 @@
 # NokaScript Language Reference
 
 Complete specification of the NokaScript language.
-Designed for a 25-column (but still allowing lines to extend beyond) fantasy console with mobile-first input.
+Designed for a 24-column (but still allowing lines to extend beyond) fantasy console with mobile-first input. See [CONSOLE.md](CONSOLE.md) for the machine itself.
 
 ## Design Principles
 
@@ -12,7 +12,7 @@ Designed for a 25-column (but still allowing lines to extend beyond) fantasy con
 - **Minimal special characters:** keywords are plain alpha, reducing keyboard-layer switches
 - **Flat built-in namespace:** standard library functions are globals, no prefixes
 - **Errors are values:** recoverable failures are ordinary `error` values threaded explicitly; unrecoverable bugs `panic`. See [Error Handling](#error-handling).
-- **Terse by default:** every token earns its place on a 25-column screen
+- **Terse by default:** every token earns its place on a 24-column screen
 
 ## Values and Types
 
