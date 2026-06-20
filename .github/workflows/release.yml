@@ -33,7 +33,7 @@ jobs:
       - name: Attach vm.wasm to the GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: zig-out/vm.wasm
+          files: zig-out/lib/vm.wasm
 
       # Check out the downstream npm package so we can update its copy of the
       # wasm. Uses a PAT because the default GITHUB_TOKEN only reaches this repo.

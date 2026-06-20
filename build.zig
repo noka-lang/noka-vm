@@ -19,7 +19,6 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/main.zig"),
             .target = target,
             .optimize = optimize,
-            .imports = &.{.{ .name = "noka_vm", .module = vm }},
         }),
     });
     b.installArtifact(exe);
@@ -55,7 +54,7 @@ pub fn build(b: *std.Build) void {
     wasm.rdynamic = true;
 
     const install_wasm = b.addInstallArtifact(wasm, .{
-        .dest_dir = .{ .override = .prefix },
+        .dest_dir = .{ .override = .{ .custom = "lib" } },
     });
 
     const wasm_step = b.step("wasm", "Build the release artifact at zig-out/vm.wasm");
