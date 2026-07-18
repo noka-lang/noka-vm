@@ -20,7 +20,6 @@ pub const OpCode = enum(u8) {
     OP_NEGATE,
     OP_PRINT,
     OP_RETURN,
-    // non-exhaustive: reading a stray byte as an OpCode is never UB
 };
 
 pub const Chunk = struct {
