@@ -98,32 +98,32 @@ const VM = struct {
 
             const op: OpCode = @enumFromInt(self.readByte());
             switch (op) {
-                .OP_CONSTANT => self.push(self.readConstant()),
+                .constant => self.push(self.readConstant()),
                 // TODO: binary ops currently assume two numbers. Once Value is
                 // a union, type-check operands and raise a runtime error on
                 // mismatch.
-                .OP_ADD => {
+                .add => {
                     const b = self.pop();
                     const a = self.pop();
                     self.push(a + b);
                 },
-                .OP_SUBTRACT => {
+                .subtract => {
                     const b = self.pop();
                     const a = self.pop();
                     self.push(a - b);
                 },
-                .OP_MULTIPLY => {
+                .multiply => {
                     const b = self.pop();
                     const a = self.pop();
                     self.push(a * b);
                 },
-                .OP_DIVIDE => {
+                .divide => {
                     const b = self.pop();
                     const a = self.pop();
                     self.push(a / b);
                 },
-                .OP_NEGATE => self.push(-self.pop()),
-                .OP_RETURN => {
+                .negate => self.push(-self.pop()),
+                .@"return" => {
                     // Temporary: print the result of the top-level expression.
                     // TODO: real `return` belongs to function calls; a
                     // top-level program should print via an explicit print

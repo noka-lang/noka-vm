@@ -6,17 +6,17 @@
 // numbers for diagnostics.
 pub const TokenType = enum {
     // single-character tokens
-    TOKEN_LEFT_PAREN,
-    TOKEN_RIGHT_PAREN,
-    TOKEN_PLUS,
-    TOKEN_MINUS,
-    TOKEN_STAR,
-    TOKEN_SLASH,
+    left_paren,
+    right_paren,
+    plus,
+    minus,
+    star,
+    slash,
     // literals
-    TOKEN_NUMBER,
+    number,
     // bookkeeping
-    TOKEN_ERROR,
-    TOKEN_EOF,
+    @"error",
+    eof,
     // TODO: identifiers, strings, keywords, comparison ops, newline, etc.
 };
 
@@ -39,18 +39,18 @@ pub const Scanner = struct {
         self.skipWhitespace();
         self.start = self.current;
 
-        if (self.isAtEnd()) return self.make(.TOKEN_EOF);
+        if (self.isAtEnd()) return self.make(.eof);
 
         const c = self.advance();
         if (isDigit(c)) return self.number();
 
         return switch (c) {
-            '(' => self.make(.TOKEN_LEFT_PAREN),
-            ')' => self.make(.TOKEN_RIGHT_PAREN),
-            '+' => self.make(.TOKEN_PLUS),
-            '-' => self.make(.TOKEN_MINUS),
-            '*' => self.make(.TOKEN_STAR),
-            '/' => self.make(.TOKEN_SLASH),
+            '(' => self.make(.left_paren),
+            ')' => self.make(.right_paren),
+            '+' => self.make(.plus),
+            '-' => self.make(.minus),
+            '*' => self.make(.star),
+            '/' => self.make(.slash),
             else => self.errorToken("unexpected character"),
         };
     }
@@ -59,7 +59,7 @@ pub const Scanner = struct {
         while (!self.isAtEnd() and (isDigit(self.peek()) or self.peek() == '.')) {
             _ = self.advance();
         }
-        return self.make(.TOKEN_NUMBER);
+        return self.make(.number);
     }
 
     fn skipWhitespace(self: *Scanner) void {
@@ -79,7 +79,7 @@ pub const Scanner = struct {
 
     fn errorToken(self: *Scanner, msg: []const u8) Token {
         _ = self;
-        return .{ .type = .TOKEN_ERROR, .lexeme = msg };
+        return .{ .type = .@"error", .lexeme = msg };
     }
 
     fn advance(self: *Scanner) u8 {

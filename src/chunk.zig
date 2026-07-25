@@ -2,24 +2,25 @@ const Value = @import("value.zig").Value;
 
 // TODO: add remaining opcodes
 pub const OpCode = enum(u8) {
-    OP_CONSTANT,
-    OP_NIL,
+    constant,
+    nil,
     // booleans
-    OP_TRUE,
-    OP_FALSE,
+    true,
+    false,
     // operators
-    OP_EQUAL,
-    OP_GREATER,
-    OP_LESS,
-    OP_ADD,
-    OP_SUBTRACT,
-    OP_MULTIPLY,
-    OP_DIVIDE,
-    OP_MODULO,
-    OP_NOT,
-    OP_NEGATE,
-    OP_PRINT,
-    OP_RETURN,
+    equal,
+    greater,
+    less,
+    add,
+    subtract,
+    multiply,
+    divide,
+    modulo,
+    not,
+    negate,
+    print,
+    @"return",
+    _,
 };
 
 pub const Chunk = struct {

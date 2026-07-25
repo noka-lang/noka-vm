@@ -5,11 +5,11 @@ pub const capacity = 64 * 1024; // 64 KiB
 pub const format_major = 1;
 
 pub const Section = enum(u3) {
-    META,
-    SRC,
-    GFX,
-    MAP,
-    SFX,
+    meta,
+    src,
+    gfx,
+    map,
+    sfx,
     _,
 };
 
@@ -116,7 +116,7 @@ test "parse with good disc" {
     const disc = fixture(&buf, src);
 
     const header = try parse(disc);
-    try testing.expectEqualStrings(src, header.section(disc, .SRC).?);
+    try testing.expectEqualStrings(src, header.section(disc, .src).?);
 }
 
 test "parse with bad voodoo" {

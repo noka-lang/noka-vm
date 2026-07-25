@@ -11,17 +11,17 @@ const value_mod = @import("value.zig");
 
 // TODO: Wire each of these up as operators are added.
 const Precedence = enum(u8) {
-    PREC_NONE,
-    PREC_ASSIGNMENT,
-    PREC_OR,
-    PREC_AND,
-    PREC_EQUALITY,
-    PREC_COMPARISON,
-    PREC_TERM,
-    PREC_FACTOR,
-    PREC_UNARY,
-    PREC_CALL,
-    PREC_PRIMARY,
+    none,
+    assignment,
+    @"or",
+    @"and",
+    equality,
+    comparison,
+    term,
+    factor,
+    unary,
+    call,
+    primary,
 };
 
 pub const Compiler = struct {
@@ -36,7 +36,7 @@ pub const Compiler = struct {
     const ParseRule = struct {
         prefix: ?ParseFn = null,
         infix: ?ParseFn = null,
-        precedence: Precedence = .PREC_NONE,
+        precedence: Precedence = .none,
     };
 
     /// Compile `source` into `chunk`. Returns false if there were errors.
@@ -44,8 +44,8 @@ pub const Compiler = struct {
         var self = Compiler{ .scanner = Scanner.init(source), .chunk = chunk };
         self.advance();
         self.expression();
-        self.consume(.TOKEN_EOF, "expected end of expression");
-        self.emitOp(.OP_RETURN);
+        self.consume(.eof, "expected end of expression");
+        self.emitOp(.@"return");
 
         if (chunk.overflow) {
             io.print("compile error: program too large\n");
@@ -56,7 +56,7 @@ pub const Compiler = struct {
     }
 
     fn expression(self: *Compiler) void {
-        self.parsePrecedence(.PREC_ASSIGNMENT);
+        self.parsePrecedence(.assignment);
     }
 
     fn parsePrecedence(self: *Compiler, prec: Precedence) void {
@@ -87,16 +87,16 @@ pub const Compiler = struct {
 
     fn grouping(self: *Compiler) void {
         self.expression();
-        self.consume(.TOKEN_RIGHT_PAREN, "expected ')' after expression");
+        self.consume(.right_paren, "expected ')' after expression");
     }
 
     fn unary(self: *Compiler) void {
         const op = self.previous.type;
 
-        self.parsePrecedence(.PREC_UNARY);
+        self.parsePrecedence(.unary);
 
         switch (op) {
-            .TOKEN_MINUS => self.emitOp(.OP_NEGATE),
+            .minus => self.emitOp(.negate),
             else => unreachable,
         }
     }
@@ -108,10 +108,10 @@ pub const Compiler = struct {
         self.parsePrecedence(@enumFromInt(@intFromEnum(rule.precedence) + 1));
 
         switch (op) {
-            .TOKEN_PLUS => self.emitOp(.OP_ADD),
-            .TOKEN_MINUS => self.emitOp(.OP_SUBTRACT),
-            .TOKEN_STAR => self.emitOp(.OP_MULTIPLY),
-            .TOKEN_SLASH => self.emitOp(.OP_DIVIDE),
+            .plus => self.emitOp(.add),
+            .minus => self.emitOp(.subtract),
+            .star => self.emitOp(.multiply),
+            .slash => self.emitOp(.divide),
             else => unreachable,
         }
     }
@@ -120,11 +120,11 @@ pub const Compiler = struct {
     // expression.
     fn getRule(t: TokenType) ParseRule {
         return switch (t) {
-            .TOKEN_LEFT_PAREN => .{ .prefix = &grouping },
-            .TOKEN_MINUS => .{ .prefix = &unary, .infix = &binary, .precedence = .PREC_TERM },
-            .TOKEN_PLUS => .{ .infix = &binary, .precedence = .PREC_TERM },
-            .TOKEN_STAR, .TOKEN_SLASH => .{ .infix = &binary, .precedence = .PREC_FACTOR },
-            .TOKEN_NUMBER => .{ .prefix = &number },
+            .left_paren => .{ .prefix = &grouping },
+            .minus => .{ .prefix = &unary, .infix = &binary, .precedence = .term },
+            .plus => .{ .infix = &binary, .precedence = .term },
+            .star, .slash => .{ .infix = &binary, .precedence = .factor },
+            .number => .{ .prefix = &number },
             else => .{},
         };
     }
@@ -136,7 +136,7 @@ pub const Compiler = struct {
 
         while (true) {
             self.current = self.scanner.next();
-            if (self.current.type != .TOKEN_ERROR) break;
+            if (self.current.type != .@"error") break;
             self.errorAtCurrent(self.current.lexeme);
         }
     }
@@ -161,7 +161,7 @@ pub const Compiler = struct {
     }
 
     fn emitConstant(self: *Compiler, value: value_mod.Value) void {
-        self.emitOp(.OP_CONSTANT);
+        self.emitOp(.constant);
         self.emitByte(self.chunk.addConstant(value));
     }
 
@@ -182,7 +182,7 @@ pub const Compiler = struct {
         self.panic_mode = true;
         self.had_error = true;
 
-        if (token.type == .TOKEN_EOF) {
+        if (token.type == .eof) {
             io.printf("compile error at end: {s}\n", .{msg});
         } else {
             io.printf("compile error at '{s}': {s}\n", .{ token.lexeme, msg });
