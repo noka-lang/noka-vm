@@ -151,6 +151,7 @@ test "parse with bad section" {
     var buf: [100]u8 = undefined;
     const disc = fixture(&buf, src);
     std.mem.writeInt(u16, buf[0x14..0x16], 65000, .little);
+    std.mem.writeInt(u16, buf[0x16..0x18], 1000, .little);
 
     try testing.expectError(ParseError.BadSection, parse(disc));
 }
