@@ -181,3 +181,12 @@ test "parse with disc too large" {
 
     try testing.expectError(ParseError.DiscTooLarge, parse(disc));
 }
+
+test "absent section returns null" {
+    const src = "1 + 2 * 3";
+    var buf: [100]u8 = undefined;
+    const disc = fixture(&buf, src);
+
+    const header = try parse(disc);
+    try testing.expect(header.section(disc, .gfx) == null);
+}
