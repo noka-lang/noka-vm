@@ -41,6 +41,7 @@ pub const ParseError = error{
     UnsupportedVersion,
     Compressed,
     BadSection,
+    DiscTooLarge,
 };
 
 pub fn parse(disc: []const u8) ParseError!Header {
@@ -61,7 +62,7 @@ pub fn parse(disc: []const u8) ParseError!Header {
         .sections = undefined,
     };
 
-    if (header.payload_len > capacity - header_len) return ParseError.BadSection;
+    if (header.payload_len > capacity - header_len) return ParseError.DiscTooLarge;
     if (header_len + header.payload_len > disc.len) return ParseError.Truncated;
 
     for (0..8) |i| {
@@ -86,6 +87,7 @@ pub fn describe(e: ParseError) []const u8 {
         .UnsupportedVersion => "unsupported major version",
         .Compressed => "compressed disc not supported yet",
         .BadSection => "section extends past payload",
+        .DiscTooLarge => "disk too large",
     };
 }
 
@@ -132,7 +134,7 @@ test "parse with bad major version" {
     const src = "1 + 2 * 3";
     var buf: [100]u8 = undefined;
     const disc = fixture(&buf, src);
-    buf[0x04] = 99;
+    disc[0x04] = 99;
 
     try testing.expectError(ParseError.UnsupportedVersion, parse(disc));
 }
@@ -141,7 +143,7 @@ test "parse with bad flag" {
     const src = "1 + 2 * 3";
     var buf: [100]u8 = undefined;
     const disc = fixture(&buf, src);
-    buf[0x07] = 1;
+    disc[0x07] = 1;
 
     try testing.expectError(ParseError.Compressed, parse(disc));
 }
@@ -150,8 +152,8 @@ test "parse with bad section" {
     const src = "1 + 2 * 3";
     var buf: [100]u8 = undefined;
     const disc = fixture(&buf, src);
-    std.mem.writeInt(u16, buf[0x14..0x16], 65000, .little);
-    std.mem.writeInt(u16, buf[0x16..0x18], 1000, .little);
+    std.mem.writeInt(u16, disc[0x14..0x16], 65000, .little);
+    std.mem.writeInt(u16, disc[0x16..0x18], 1000, .little);
 
     try testing.expectError(ParseError.BadSection, parse(disc));
 }
@@ -163,4 +165,19 @@ test "parse with truncated disc" {
     disc[0x08] = 255;
 
     try testing.expectError(ParseError.Truncated, parse(disc));
+}
+
+test "parse with truncated header" {
+    var buf: [100]u8 = undefined;
+    const disc = fixture(&buf, "");
+
+    try testing.expectError(ParseError.Truncated, parse(disc[0..10]));
+}
+
+test "parse with disc too large" {
+    var buf: [100]u8 = undefined;
+    const disc = fixture(&buf, "");
+    std.mem.writeInt(u32, disc[0x08..0x0C], @intCast(capacity), .little);
+
+    try testing.expectError(ParseError.DiscTooLarge, parse(disc));
 }
