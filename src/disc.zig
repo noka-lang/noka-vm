@@ -1,3 +1,24 @@
+/// --- DISC LAYOUT -----------------------------------------------------------
+///
+/// address     bytes               description
+/// ---------------------------------------------------------------------------
+/// 0x00        4E 4F 4B 41         voodoo - "NOKA"
+/// 0x04        01                  major version
+/// 0x05        00                  minor version
+/// 0x06        00                  patch version
+/// 0x07        00                  flags - 0 -> not compressed
+/// 0x08        09 00 00 00         payload_len (u32 LE)
+/// 0x0C        09 00 00 00         stored_len
+/// 0x10        00 00 00 00         entry 0: META - absent
+/// 0x14        00 00 06 00         entry 1: SRC  - offset 0, len 6
+/// 0x18        00 00 00 00         entry 2: GFX  - absent
+/// 0x1C        00 00 00 00         entry 3: MAP  - absent
+/// 0x20        00 00 00 00         entry 4: SFX  - absent
+/// 0x24        00 00 00 00         entry 5: reserved
+/// 0x28        00 00 00 00         entry 6: reserved
+/// 0x2C        00 00 00 00         entry 7: reserved
+/// ----------- END OF HEADER -------------------------------------------------
+/// 0x30        67 6F 74 63 68 61   "1 + 2 * 3"
 const std = @import("std");
 
 pub const header_len = 48;
@@ -82,12 +103,12 @@ pub fn parse(disc: []const u8) ParseError!Header {
 
 pub fn describe(e: ParseError) []const u8 {
     return switch (e) {
-        .Truncated => "disc truncated",
-        .BadVoodoo => "invalid magic header",
-        .UnsupportedVersion => "unsupported major version",
-        .Compressed => "compressed disc not supported yet",
-        .BadSection => "section extends past payload",
-        .DiscTooLarge => "disk too large",
+        ParseError.Truncated => "disc truncated",
+        ParseError.BadVoodoo => "invalid magic header",
+        ParseError.UnsupportedVersion => "unsupported major version",
+        ParseError.Compressed => "compressed disc not supported yet",
+        ParseError.BadSection => "section extends past payload",
+        ParseError.DiscTooLarge => "disk too large",
     };
 }
 
@@ -95,8 +116,8 @@ pub fn describe(e: ParseError) []const u8 {
 
 const testing = @import("std").testing;
 
-// build a good disc from a given src
-fn fixture(buf: []u8, src: []const u8) []u8 {
+// forge a good disc from a given src
+pub fn forgeDisc(buf: []u8, src: []const u8) []u8 {
     @memset(buf[0..header_len], 0);
     @memcpy(buf[0..4], "NOKA"); // good voodoo
     buf[0x04] = 1; // major version
@@ -115,7 +136,7 @@ fn fixture(buf: []u8, src: []const u8) []u8 {
 test "parse with good disc" {
     const src = "1 + 2 * 3";
     var buf: [100]u8 = undefined;
-    const disc = fixture(&buf, src);
+    const disc = forgeDisc(&buf, src);
 
     const header = try parse(disc);
     try testing.expectEqualStrings(src, header.section(disc, .src).?);
@@ -124,7 +145,7 @@ test "parse with good disc" {
 test "parse with bad voodoo" {
     const src = "1 + 2 * 3";
     var buf: [100]u8 = undefined;
-    const disc = fixture(&buf, src);
+    const disc = forgeDisc(&buf, src);
     @memcpy(disc[0..4], "KANO");
 
     try testing.expectError(ParseError.BadVoodoo, parse(disc));
@@ -133,7 +154,7 @@ test "parse with bad voodoo" {
 test "parse with bad major version" {
     const src = "1 + 2 * 3";
     var buf: [100]u8 = undefined;
-    const disc = fixture(&buf, src);
+    const disc = forgeDisc(&buf, src);
     disc[0x04] = 99;
 
     try testing.expectError(ParseError.UnsupportedVersion, parse(disc));
@@ -142,7 +163,7 @@ test "parse with bad major version" {
 test "parse with bad flag" {
     const src = "1 + 2 * 3";
     var buf: [100]u8 = undefined;
-    const disc = fixture(&buf, src);
+    const disc = forgeDisc(&buf, src);
     disc[0x07] = 1;
 
     try testing.expectError(ParseError.Compressed, parse(disc));
@@ -151,7 +172,7 @@ test "parse with bad flag" {
 test "parse with bad section" {
     const src = "1 + 2 * 3";
     var buf: [100]u8 = undefined;
-    const disc = fixture(&buf, src);
+    const disc = forgeDisc(&buf, src);
     std.mem.writeInt(u16, disc[0x14..0x16], 65000, .little);
     std.mem.writeInt(u16, disc[0x16..0x18], 1000, .little);
 
@@ -161,7 +182,7 @@ test "parse with bad section" {
 test "parse with truncated disc" {
     const src = "1 + 2 * 3";
     var buf: [100]u8 = undefined;
-    const disc = fixture(&buf, src);
+    const disc = forgeDisc(&buf, src);
     disc[0x08] = 255;
 
     try testing.expectError(ParseError.Truncated, parse(disc));
@@ -169,14 +190,14 @@ test "parse with truncated disc" {
 
 test "parse with truncated header" {
     var buf: [100]u8 = undefined;
-    const disc = fixture(&buf, "");
+    const disc = forgeDisc(&buf, "");
 
     try testing.expectError(ParseError.Truncated, parse(disc[0..10]));
 }
 
 test "parse with disc too large" {
     var buf: [100]u8 = undefined;
-    const disc = fixture(&buf, "");
+    const disc = forgeDisc(&buf, "");
     std.mem.writeInt(u32, disc[0x08..0x0C], @intCast(capacity), .little);
 
     try testing.expectError(ParseError.DiscTooLarge, parse(disc));
@@ -185,7 +206,7 @@ test "parse with disc too large" {
 test "absent section returns null" {
     const src = "1 + 2 * 3";
     var buf: [100]u8 = undefined;
-    const disc = fixture(&buf, src);
+    const disc = forgeDisc(&buf, src);
 
     const header = try parse(disc);
     try testing.expect(header.section(disc, .gfx) == null);
