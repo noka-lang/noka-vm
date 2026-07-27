@@ -134,11 +134,13 @@ Two properties worth preserving as this grows:
 
 ## Discs
 
-A disc is a **binary container holding at most 65536 bytes of content.**
+A disc is a **binary container of at most 65536 bytes, header included.**
 
-The limit applies to the **uncompressed** payload. Compression is a storage detail the author never reasons about: a disc that fits, fits, regardless of how well it happens to squeeze. Budgeting against compressed size would mean adding a comment could shrink a cart and removing one could break it, which makes the budget unpredictable in exactly the way the token gauge is designed not to be.
+The 48-byte header counts against the limit, so a payload tops out at **65488 bytes**. That keeps `DISC` a clean 64 KiB region that holds a whole disc image with nothing hanging off the end.
 
-How the 64 KiB is divided between source and assets is the author's choice.
+Size is measured **uncompressed**. Compression is a storage detail the author never reasons about: a disc that fits, fits, regardless of how well it happens to squeeze. Budgeting against compressed size would mean adding a comment could shrink a cart and removing one could break it, which makes the budget unpredictable in exactly the way the token gauge is designed not to be.
+
+How the remaining space divides between source and assets is the author's choice.
 
 ### Header
 
@@ -468,4 +470,4 @@ The token budget bounds total program bytecode well inside the arena, so overflo
 - **IO registers.** The layout within `PALETTE` + IO is unassigned beyond the palette itself. Input state, frame counter, and RNG seed want homes here.
 - **Audio API surface.** Live modification works through raw writes to `SFX`, which is the fantasy-console idiom and needs no new natives. Whether to also provide structured helpers (`sfx_param`, `pattern_set`) as guardrails over the same bytes is undecided.
 - **Palette headroom.** The pixel format is 8bpp, so the palette could widen to 64 or 256 entries without touching the memory map or the cart format. Not planned; noted because the door is already open if it is ever wanted.
-- **Disc compression.** Uncompressed text at 64 KiB may prove tight once real games exist. Compressing on save is a format-version bump, which the header already allows for.
+- **Disc compression.** The format reserves flags bit 0 for it and the host would do the work, but nothing implements it yet and the VM rejects a disc that still has the bit set. Worth revisiting once real games exist and 65488 bytes starts to bind.
