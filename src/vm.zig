@@ -5,7 +5,8 @@ const OpCode = @import("chunk.zig").OpCode;
 const Compiler = @import("compiler.zig").Compiler;
 const debug = @import("debug.zig");
 const Value = @import("value.zig").Value;
-const printValue = @import("./value.zig").printValue;
+const printValue = @import("value.zig").printValue;
+const disc_mod = @import("disc.zig");
 
 const debug_print_bytecode = false;
 const debug_trace_execution = false;
@@ -35,11 +36,32 @@ var chunk: Chunk = undefined;
 /// The host calls `init()` before calling this.
 export fn eval(len: usize) i32 {
     if (len > disc.len) {
-        io.print("source too large\n");
+        io.print("compile error: source too large\n");
         return 1;
     }
 
     return compileAndRun(disc[0..len]);
+}
+
+export fn load_disc(len: usize) i32 {
+    if (len > disc.len) {
+        io.print("compile error: disc too large\n");
+        return 1;
+    }
+
+    const header = disc_mod.parse(disc[0..len]) catch |e| {
+        io.printf("disc error: {s}\n", .{disc_mod.describe(e)});
+        return 1;
+    };
+
+    const src = header.section(disc[0..len], .src) orelse {
+        io.print("runtime error: disc has no source\n");
+        return 1;
+    };
+
+    // TODO: handle the other sections
+
+    return compileAndRun(src);
 }
 
 /// Compile and run the given source code (a disc).
@@ -187,9 +209,42 @@ test "interpretSource returns nonzero on failure" {
     try testing.expectEqual(@as(i32, 1), interpretSource("1 +"));
 }
 
-test "eval rejects a length past the disc" {
+test "eval rejects a length past the disc size" {
     io.beginCapture();
     defer io.endCapture();
     try testing.expectEqual(@as(i32, 1), eval(disc.len + 1));
-    try testing.expectEqualStrings("source too large\n", io.captured());
+    try testing.expectEqualStrings("compile error: source too large\n", io.captured());
+}
+
+test "load_disc rejects a length past the disc size" {
+    io.beginCapture();
+    defer io.endCapture();
+    try testing.expectEqual(@as(i32, 1), load_disc(disc.len + 1));
+    try testing.expectEqualStrings("compile error: disc too large\n", io.captured());
+}
+
+test "load_disc runs a disc's source" {
+    const image = disc_mod.forgeDisc(&disc, "1 + 2 * 3");
+    io.beginCapture();
+    defer io.endCapture();
+    try testing.expectEqual(@as(i32, 0), load_disc(image.len));
+    try testing.expectEqualStrings("7\n", io.captured());
+}
+
+test "corrupt disc fails to run" {
+    const image = disc_mod.forgeDisc(&disc, "1 + 2 * 3");
+    @memcpy(image[0..4], "KANO");
+    io.beginCapture();
+    defer io.endCapture();
+    try testing.expectEqual(@as(i32, 1), load_disc(image.len));
+    try testing.expectEqualStrings("disc error: invalid magic header\n", io.captured());
+}
+
+test "disc with no source fails to run" {
+    const image = disc_mod.forgeDisc(&disc, "1 + 2 * 3");
+    std.mem.writeInt(u16, image[0x16..0x18], 0, .little);
+    io.beginCapture();
+    defer io.endCapture();
+    try testing.expectEqual(@as(i32, 1), load_disc(image.len));
+    try testing.expectEqualStrings("runtime error: disc has no source\n", io.captured());
 }
