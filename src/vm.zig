@@ -36,7 +36,7 @@ var chunk: Chunk = undefined;
 /// The host calls `init()` before calling this.
 export fn eval(len: usize) i32 {
     if (len > disc.len) {
-        io.print("compile error: source too large\n");
+        io.print("disc error: source too large\n");
         return 1;
     }
 
@@ -45,7 +45,7 @@ export fn eval(len: usize) i32 {
 
 export fn load_disc(len: usize) i32 {
     if (len > disc.len) {
-        io.print("compile error: disc too large\n");
+        io.print("disc error: disc too large\n");
         return 1;
     }
 
@@ -55,7 +55,7 @@ export fn load_disc(len: usize) i32 {
     };
 
     const src = header.section(disc[0..len], .src) orelse {
-        io.print("runtime error: disc has no source\n");
+        io.print("disc error: disc has no source\n");
         return 1;
     };
 
@@ -213,14 +213,14 @@ test "eval rejects a length past the disc size" {
     io.beginCapture();
     defer io.endCapture();
     try testing.expectEqual(@as(i32, 1), eval(disc.len + 1));
-    try testing.expectEqualStrings("compile error: source too large\n", io.captured());
+    try testing.expectEqualStrings("disc error: source too large\n", io.captured());
 }
 
 test "load_disc rejects a length past the disc size" {
     io.beginCapture();
     defer io.endCapture();
     try testing.expectEqual(@as(i32, 1), load_disc(disc.len + 1));
-    try testing.expectEqualStrings("compile error: disc too large\n", io.captured());
+    try testing.expectEqualStrings("disc error: disc too large\n", io.captured());
 }
 
 test "load_disc runs a disc's source" {
@@ -246,5 +246,5 @@ test "disc with no source fails to run" {
     io.beginCapture();
     defer io.endCapture();
     try testing.expectEqual(@as(i32, 1), load_disc(image.len));
-    try testing.expectEqualStrings("runtime error: disc has no source\n", io.captured());
+    try testing.expectEqualStrings("disc error: disc has no source\n", io.captured());
 }
