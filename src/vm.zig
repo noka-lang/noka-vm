@@ -43,6 +43,9 @@ export fn eval(len: usize) i32 {
     return compileAndRun(disc[0..len]);
 }
 
+/// Load a disc from the host's `disc` buffer, interpreting its source.
+/// Returns 0 on success, non-zero on error.
+/// The host calls `init()` before calling this.
 export fn load_disc(len: usize) i32 {
     if (len > disc.len) {
         io.print("disc error: disc too large\n");
@@ -64,7 +67,7 @@ export fn load_disc(len: usize) i32 {
     return compileAndRun(src);
 }
 
-/// Compile and run the given source code (a disc).
+/// Compile and run the given source code.
 pub fn interpretSource(source: []const u8) i32 {
     init();
 
