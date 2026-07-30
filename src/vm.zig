@@ -227,6 +227,7 @@ test "load_disc rejects a length past the disc size" {
 }
 
 test "load_disc runs a disc's source" {
+    @memset(&disc, 0);
     const image = disc_mod.forgeDisc(&disc, "1 + 2 * 3");
     io.beginCapture();
     defer io.endCapture();
@@ -235,6 +236,7 @@ test "load_disc runs a disc's source" {
 }
 
 test "corrupt disc fails to run" {
+    @memset(&disc, 0);
     const image = disc_mod.forgeDisc(&disc, "1 + 2 * 3");
     @memcpy(image[0..4], "KANO");
     io.beginCapture();
@@ -244,6 +246,7 @@ test "corrupt disc fails to run" {
 }
 
 test "disc with no source fails to run" {
+    @memset(&disc, 0);
     const image = disc_mod.forgeDisc(&disc, "1 + 2 * 3");
     std.mem.writeInt(u16, image[0x16..0x18], 0, .little);
     io.beginCapture();
