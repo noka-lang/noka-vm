@@ -74,6 +74,13 @@ pub fn interpretSource(source: []const u8) i32 {
     return compileAndRun(source);
 }
 
+pub fn interpretDisc(image: []const u8) i32 {
+    init();
+    @memcpy(disc[0..image.len], image);
+
+    return load_disc(image.len);
+}
+
 fn compileAndRun(source: []const u8) i32 {
     chunk = Chunk{};
 

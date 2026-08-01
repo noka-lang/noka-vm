@@ -10,7 +10,7 @@ For the language that runs on it, see [LANGUAGE.md](LANGUAGE.md).
 - **One grid:** text cell, tile, and sprite are all 8×8. There is no second unit of layout.
 - **Mobile-first and portrait:** the screen is taller than it is wide, and 24 columns wide, because thumbs type on phones. See LANGUAGE.md's design principles.
 - **One palette:** DHARM32 on the 15-bit ladder is the console's look. It is not configurable and carts cannot ship their own (for now).
-- **Discs are self-contained:** one binary container holds a cart's code, art, and sound. It is created, edited, and shared inside the Noka app.
+- **Discs are self-contained:** one binary container (.noka) holds a cart's code, art, and sound. It is created, edited, and shared inside the Noka app.
 - **Budgets, not walls:** the disc is a hard limit because a medium has a size. Everything else that constrains the author is advisory.
 - **Reserve early:** address ranges are cheap now and impossible to move once carts exist.
 
@@ -141,6 +141,8 @@ The 48-byte header counts against the limit, so a payload tops out at **65488 by
 Size is measured **uncompressed**. Compression is a storage detail the author never reasons about: a disc that fits, fits, regardless of how well it happens to squeeze. Budgeting against compressed size would mean adding a comment could shrink a cart and removing one could break it, which makes the budget unpredictable in exactly the way the token gauge is designed not to be.
 
 How the remaining space divides between source and assets is the author's choice.
+
+Disc files end in `.noka`!
 
 ### Header
 

@@ -19,6 +19,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/main.zig"),
             .target = target,
             .optimize = optimize,
+            .imports = &.{.{ .name = "noka_vm", .module = vm }},
         }),
     });
     b.installArtifact(exe);
@@ -29,6 +30,9 @@ pub fn build(b: *std.Build) void {
 
     const run_step = b.step("run", "Evaluate a program natively: zig build run -- '1 + 2'");
     run_step.dependOn(&run_cmd.step);
+
+    // --- zig build forge ----------------------------------------------------
+    // TODO: add a `zig build forge` step wrapping `forgeDisc` to generate test discs from the terminal
 
     // --- zig build test -----------------------------------------------------
     const vm_tests = b.addTest(.{ .root_module = vm });
