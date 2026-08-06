@@ -142,7 +142,7 @@ const VM = struct {
                     const a = self.pop();
 
                     if (a != .number or b != .number) {
-                        return self.runtimeError("cannot {s} a {s} and a {s}", .{ @tagName(op), a.typeName(), b.typeName() });
+                        return self.runtimeError("cannot {s} {s} and {s}", .{ @tagName(op), a.typeName(), b.typeName() });
                     }
 
                     self.push(.{ .number = switch (op) {
@@ -157,7 +157,7 @@ const VM = struct {
                     const v = self.pop();
 
                     if (v != .number) {
-                        return self.runtimeError("cannot negate a {s}", .{v.typeName()});
+                        return self.runtimeError("cannot negate {s}", .{v.typeName()});
                     }
 
                     self.push(.{ .number = -v.number });
@@ -225,15 +225,15 @@ test "arithmetic" {
 }
 
 test "arithmetic on non-numbers is a runtime error" {
-    try expectFailure("1 + true", "runtime error: cannot add a number and a boolean\n");
-    try expectFailure("nil - false", "runtime error: cannot subtract a nil and a boolean\n");
-    try expectFailure("3 * true", "runtime error: cannot multiply a number and a boolean\n");
-    try expectFailure("false / 4", "runtime error: cannot divide a boolean and a number\n");
+    try expectFailure("1 + true", "runtime error: cannot add number and boolean\n");
+    try expectFailure("nil - false", "runtime error: cannot subtract nil and boolean\n");
+    try expectFailure("3 * true", "runtime error: cannot multiply number and boolean\n");
+    try expectFailure("false / 4", "runtime error: cannot divide boolean and number\n");
 }
 
 test "negating a non-number is a runtime error" {
-    try expectFailure("-true", "runtime error: cannot negate a boolean\n");
-    try expectFailure("-nil", "runtime error: cannot negate a nil\n");
+    try expectFailure("-true", "runtime error: cannot negate boolean\n");
+    try expectFailure("-nil", "runtime error: cannot negate nil\n");
 }
 
 test "precedence and grouping" {
