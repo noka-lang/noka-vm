@@ -198,15 +198,16 @@ fn expectOutput(source: []const u8, expected: []const u8) !void {
     const code = interpretSource(source);
 
     try testing.expectEqualStrings(expected, io.captured());
-    try testing.expectEqual(@as(i32, 1), code);
+    try testing.expectEqual(@as(i32, 0), code);
 }
 
 fn expectFailure(source: []const u8, expected: []const u8) !void {
     io.beginCapture();
     defer io.endCapture();
     const code = interpretSource(source);
+
     try testing.expectEqualStrings(expected, io.captured());
-    try testing.expectEqual(@as(i32, 0), code);
+    try testing.expectEqual(@as(i32, 1), code);
 }
 
 test "literals" {
@@ -249,12 +250,12 @@ test "unary minus" {
 }
 
 test "compile errors are reported, not executed" {
-    try expectOutput("(1 + 2", "compile error at end: expected ')' after expression\n");
-    try expectOutput("1 +", "compile error at end: expected an expression\n");
+    try expectFailure("(1 + 2", "compile error at end: expected ')' after expression\n");
+    try expectFailure("1 +", "compile error at end: expected an expression\n");
     // Scanner error tokens awkwardly carry their message in `lexeme`, so it lands where
     // the offending text would normally go. Pinned here so a fix shows up as
     // a deliberate test change.
-    try expectOutput("$", "compile error at 'unexpected character': unexpected character\n");
+    try expectFailure("$", "compile error at 'unexpected character': unexpected character\n");
 }
 
 test "interpretSource returns nonzero on failure" {
