@@ -195,8 +195,26 @@ const testing = @import("std").testing;
 fn expectOutput(source: []const u8, expected: []const u8) !void {
     io.beginCapture();
     defer io.endCapture();
-    _ = interpretSource(source);
+    const code = interpretSource(source);
+
     try testing.expectEqualStrings(expected, io.captured());
+    try testing.expectEqual(@as(i32, 1), code);
+}
+
+fn expectFailure(source: []const u8, expected: []const u8) !void {
+    io.beginCapture();
+    defer io.endCapture();
+    const code = interpretSource(source);
+    try testing.expectEqualStrings(expected, io.captured());
+    try testing.expectEqual(@as(i32, 0), code);
+}
+
+test "literals" {
+    try expectOutput("true", "true\n");
+    try expectOutput("false", "false\n");
+    try expectOutput("nil", "nil\n");
+    try expectOutput("42", "42\n");
+    try expectOutput("3.14", "3.14\n");
 }
 
 test "arithmetic" {
@@ -204,6 +222,18 @@ test "arithmetic" {
     try expectOutput("7 - 9", "-2\n");
     try expectOutput("6 * 7", "42\n");
     try expectOutput("10 / 4", "2.5\n");
+}
+
+test "arithmetic on non-numbers is a runtime error" {
+    try expectFailure("1 + true", "runtime error: cannot add a number and a boolean\n");
+    try expectFailure("nil - false", "runtime error: cannot subtract a nil and a boolean\n");
+    try expectFailure("3 * true", "runtime error: cannot multiply a number and a boolean\n");
+    try expectFailure("false / 4", "runtime error: cannot divide a boolean and a number\n");
+}
+
+test "negating a non-number is a runtime error" {
+    try expectFailure("-true", "runtime error: cannot negate a boolean\n");
+    try expectFailure("-nil", "runtime error: cannot negate a nil\n");
 }
 
 test "precedence and grouping" {
