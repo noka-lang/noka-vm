@@ -6,11 +6,11 @@ pub const Value = union(enum) {
     number: f64,
     // TODO: string, array, object, function, error
 
-    fn @"type"(self: Value) []const u8 {
+    pub fn typeName(self: Value) []const u8 {
         return switch (self) {
-            Value.nil => "nil",
-            Value.boolean => "boolean",
-            Value.number => "number",
+            .nil => "nil",
+            .boolean => "boolean",
+            .number => "number",
             // TODO: string, array, object, function, error
         };
     }
@@ -25,8 +25,7 @@ pub fn printValue(value: Value) void {
     }
 }
 
-// --- Type checking ----------------------------------------------------------
-
+// TODO: marked for removal
 pub fn IS_BOOL(value: Value) bool {
     return value == Value.boolean;
 }

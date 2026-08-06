@@ -137,27 +137,31 @@ const VM = struct {
                 // TODO: binary ops currently assume two numbers. Once Value is
                 // a union, type-check operands and raise a runtime error on
                 // mismatch.
-                .add => {
+                .add, .subtract, .multiply, .divide => {
                     const b = self.pop();
                     const a = self.pop();
-                    self.push(Value{ .number = a.number + b.number });
+
+                    if (a != .number or b != .number) {
+                        return self.runtimeError("cannot {s} a {s} and a {s}", .{ @tagName(op), a.typeName(), b.typeName() });
+                    }
+
+                    self.push(.{ .number = switch (op) {
+                        .add => a.number + b.number,
+                        .subtract => a.number - b.number,
+                        .multiply => a.number * b.number,
+                        .divide => a.number / b.number,
+                        else => unreachable,
+                    } });
                 },
-                .subtract => {
-                    const b = self.pop();
-                    const a = self.pop();
-                    self.push(Value{ .number = a.number - b.number });
+                .negate => {
+                    const v = self.pop();
+
+                    if (v != .number) {
+                        return self.runtimeError("cannot negate a {s}", .{v.typeName()});
+                    }
+
+                    self.push(.{ .number = -v.number });
                 },
-                .multiply => {
-                    const b = self.pop();
-                    const a = self.pop();
-                    self.push(Value{ .number = a.number * b.number });
-                },
-                .divide => {
-                    const b = self.pop();
-                    const a = self.pop();
-                    self.push(Value{ .number = a.number / b.number });
-                },
-                .negate => self.push(Value{ .number = -self.pop().number }),
                 .@"return" => {
                     // Temporary: print the result of the top-level expression.
                     // TODO: real `return` belongs to function calls; a
@@ -173,6 +177,14 @@ const VM = struct {
                 },
             }
         }
+    }
+
+    fn runtimeError(self: *VM, comptime message: []const u8, args: anytype) bool {
+        // TODO: print line number
+        _ = self;
+        io.printf("runtime error: " ++ message ++ "\n", args);
+
+        return false;
     }
 };
 
