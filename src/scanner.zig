@@ -1,3 +1,5 @@
+const std = @import("std");
+
 // TODO: this is the most spec-heavy file. LANGUAGE.md's "Lexical Structure"
 // and "Lexical Grammar" sections define identifiers, keywords, string
 // literals, comments, and (the tricky one) *newline significance* (the stack
@@ -14,6 +16,9 @@ pub const TokenType = enum {
     slash,
     // literals
     number,
+    true,
+    false,
+    nil,
     // bookkeeping
     @"error",
     eof,
@@ -42,6 +47,7 @@ pub const Scanner = struct {
         if (self.isAtEnd()) return self.make(.eof);
 
         const c = self.advance();
+        if (isAlpha(c)) return self.identifier();
         if (isDigit(c)) return self.number();
 
         return switch (c) {
@@ -56,7 +62,7 @@ pub const Scanner = struct {
     }
 
     fn number(self: *Scanner) Token {
-        while (!self.isAtEnd() and (isDigit(self.peek()) or self.peek() == '.')) {
+        while (isDigit(self.peek()) or self.peek() == '.') {
             _ = self.advance();
         }
         return self.make(.number);
@@ -65,7 +71,7 @@ pub const Scanner = struct {
     fn skipWhitespace(self: *Scanner) void {
         // TODO: newlines are significant in NokaScript, so don't just eat
         // them. Also handle comments here (see spec "Comments").
-        while (!self.isAtEnd()) {
+        while (true) {
             switch (self.peek()) {
                 ' ', '\t', '\r', '\n' => _ = self.advance(),
                 else => return,
@@ -73,29 +79,57 @@ pub const Scanner = struct {
         }
     }
 
-    fn make(self: *Scanner, t: TokenType) Token {
+    fn identifier(self: *Scanner) Token {
+        while (isAlpha(self.peek()) or isDigit(self.peek())) _ = self.advance();
+
+        return self.make(self.identifierType());
+    }
+
+    fn identifierType(self: Scanner) TokenType {
+        // TODO: all the rest of the keywords
+        switch (self.src[self.start]) {
+            'f' => return self.checkKeyword(1, 4, "alse", .false),
+            'n' => return self.checkKeyword(1, 2, "il", .nil),
+            't' => return self.checkKeyword(1, 3, "rue", .true),
+            else => return .@"error",
+        }
+    }
+
+    fn checkKeyword(self: Scanner, start: usize, length: usize, rest: []const u8, @"type": TokenType) TokenType {
+        if (self.current - self.start == start + length and std.mem.eql(u8, self.src[self.start + start .. self.start + start + length], rest)) {
+            return @"type";
+        }
+
+        return .@"error";
+    }
+
+    fn make(self: Scanner, t: TokenType) Token {
         return .{ .type = t, .lexeme = self.src[self.start..self.current] };
     }
 
-    fn errorToken(self: *Scanner, msg: []const u8) Token {
+    fn errorToken(self: Scanner, msg: []const u8) Token {
         _ = self;
         return .{ .type = .@"error", .lexeme = msg };
     }
 
     fn advance(self: *Scanner) u8 {
-        const c = self.src[self.current];
         self.current += 1;
-        return c;
+        return self.src[self.current - 1];
     }
 
-    fn peek(self: *Scanner) u8 {
+    fn peek(self: Scanner) u8 {
+        if (self.isAtEnd()) return 0;
         return self.src[self.current];
     }
 
-    fn isAtEnd(self: *Scanner) bool {
+    fn isAtEnd(self: Scanner) bool {
         return self.current >= self.src.len;
     }
 };
+
+fn isAlpha(c: u8) bool {
+    return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or c == '_';
+}
 
 fn isDigit(c: u8) bool {
     return c >= '0' and c <= '9';

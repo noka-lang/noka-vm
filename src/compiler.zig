@@ -7,7 +7,7 @@ const TokenType = scanner_mod.TokenType;
 const chunk_mod = @import("chunk.zig");
 const Chunk = chunk_mod.Chunk;
 const OpCode = chunk_mod.OpCode;
-const value_mod = @import("value.zig");
+const Value = @import("value.zig").Value;
 
 // TODO: Wire each of these up as operators are added.
 const Precedence = enum(u8) {
@@ -41,18 +41,18 @@ pub const Compiler = struct {
 
     /// Compile `source` into `chunk`. Returns false if there were errors.
     pub fn compile(source: []const u8, chunk: *Chunk) bool {
-        var self = Compiler{ .scanner = Scanner.init(source), .chunk = chunk };
-        self.advance();
-        self.expression();
-        self.consume(.eof, "expected end of expression");
-        self.emitOp(.@"return");
+        var parser = Compiler{ .scanner = Scanner.init(source), .chunk = chunk };
+        parser.advance();
+        parser.expression();
+        parser.consume(.eof, "expected end of expression");
+        parser.emitOp(.@"return");
 
         if (chunk.overflow) {
             io.print("compile error: program too large\n");
             return false;
         }
 
-        return !self.had_error;
+        return !parser.had_error;
     }
 
     fn expression(self: *Compiler) void {
@@ -77,10 +77,10 @@ pub const Compiler = struct {
     // --- parse rules --------------------------------------------------------
 
     fn number(self: *Compiler) void {
-        const v = std.fmt.parseFloat(f64, self.previous.lexeme) catch {
+        const v: Value = Value{ .number = std.fmt.parseFloat(f64, self.previous.lexeme) catch {
             self.errorAtPrevious("invalid number");
             return;
-        };
+        } };
 
         self.emitConstant(v);
     }
@@ -88,6 +88,15 @@ pub const Compiler = struct {
     fn grouping(self: *Compiler) void {
         self.expression();
         self.consume(.right_paren, "expected ')' after expression");
+    }
+
+    fn literal(self: *Compiler) void {
+        switch (self.previous.type) {
+            .false => self.emitByte(@intFromEnum(OpCode.false)),
+            .nil => self.emitByte(@intFromEnum(OpCode.nil)),
+            .true => self.emitByte(@intFromEnum(OpCode.true)),
+            else => unreachable,
+        }
     }
 
     fn unary(self: *Compiler) void {
@@ -123,8 +132,12 @@ pub const Compiler = struct {
             .left_paren => .{ .prefix = &grouping },
             .minus => .{ .prefix = &unary, .infix = &binary, .precedence = .term },
             .plus => .{ .infix = &binary, .precedence = .term },
-            .star, .slash => .{ .infix = &binary, .precedence = .factor },
+            .slash => .{ .infix = &binary, .precedence = .factor },
+            .star => .{ .infix = &binary, .precedence = .factor },
             .number => .{ .prefix = &number },
+            .true => .{ .prefix = &literal },
+            .false => .{ .prefix = &literal },
+            .nil => .{ .prefix = &literal },
             else => .{},
         };
     }
@@ -160,7 +173,7 @@ pub const Compiler = struct {
         self.chunk.writeOp(op);
     }
 
-    fn emitConstant(self: *Compiler, value: value_mod.Value) void {
+    fn emitConstant(self: *Compiler, value: Value) void {
         self.emitOp(.constant);
         self.emitByte(self.chunk.addConstant(value));
     }

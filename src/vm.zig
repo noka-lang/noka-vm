@@ -131,30 +131,33 @@ const VM = struct {
             const op: OpCode = @enumFromInt(self.readByte());
             switch (op) {
                 .constant => self.push(self.readConstant()),
+                .nil => self.push(.nil),
+                .true => self.push(Value{ .boolean = true }),
+                .false => self.push(Value{ .boolean = false }),
                 // TODO: binary ops currently assume two numbers. Once Value is
                 // a union, type-check operands and raise a runtime error on
                 // mismatch.
                 .add => {
                     const b = self.pop();
                     const a = self.pop();
-                    self.push(a + b);
+                    self.push(Value{ .number = a.number + b.number });
                 },
                 .subtract => {
                     const b = self.pop();
                     const a = self.pop();
-                    self.push(a - b);
+                    self.push(Value{ .number = a.number - b.number });
                 },
                 .multiply => {
                     const b = self.pop();
                     const a = self.pop();
-                    self.push(a * b);
+                    self.push(Value{ .number = a.number * b.number });
                 },
                 .divide => {
                     const b = self.pop();
                     const a = self.pop();
-                    self.push(a / b);
+                    self.push(Value{ .number = a.number / b.number });
                 },
-                .negate => self.push(-self.pop()),
+                .negate => self.push(Value{ .number = -self.pop().number }),
                 .@"return" => {
                     // Temporary: print the result of the top-level expression.
                     // TODO: real `return` belongs to function calls; a

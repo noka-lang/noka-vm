@@ -1,13 +1,40 @@
 const io = @import("io.zig");
 
-// TODO: for now every value is an f64. The spec ("Values and Types") wants
-// nil, booleans, strings, and heap objects. Turn this into a tagged union,
-// e.g.
-//     pub const Value = union(enum) { nil, boolean: bool, number: f64, obj: *Obj };
-// and update the VM's arithmetic ops to type-check their operands.
-pub const Value = f64;
+pub const Value = union(enum) {
+    nil,
+    boolean: bool,
+    number: f64,
+    // TODO: string, array, object, function, error
 
-// TODO: Will need to switch on the union tag once `Value` grows.
+    fn @"type"(self: Value) []const u8 {
+        return switch (self) {
+            Value.nil => "nil",
+            Value.boolean => "boolean",
+            Value.number => "number",
+            // TODO: string, array, object, function, error
+        };
+    }
+};
+
 pub fn printValue(value: Value) void {
-    io.printf("{d}", .{value});
+    switch (value) {
+        .boolean => |b| io.printf("{}", .{b}),
+        .number => |n| io.printf("{d}", .{n}),
+        .nil => io.printf("nil", .{}),
+        // TODO: string, array, object, function, error
+    }
+}
+
+// --- Type checking ----------------------------------------------------------
+
+pub fn IS_BOOL(value: Value) bool {
+    return value == Value.boolean;
+}
+
+pub fn IS_NIL(value: Value) bool {
+    return value == Value.nil;
+}
+
+pub fn IS_NUMBER(value: Value) bool {
+    return value == Value.number;
 }
