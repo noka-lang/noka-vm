@@ -9,8 +9,8 @@ const valuesEqual = @import("value.zig").valuesEqual;
 const printValue = @import("value.zig").printValue;
 const disc_mod = @import("disc.zig");
 
-const debug_print_bytecode = false;
-const debug_trace_execution = false;
+const debug_print_bytecode = true;
+const debug_trace_execution = true;
 
 var heap_buffer: [1 << 20]u8 = undefined; // 1 MiB
 var fba = std.heap.FixedBufferAllocator.init(&heap_buffer);
@@ -86,7 +86,7 @@ fn compileAndRun(source: []const u8) i32 {
     chunk = Chunk{};
 
     if (!Compiler.compile(source, &chunk)) return 1;
-    if (debug_print_bytecode) debug.disassembleChunk(&chunk, "code");
+    if (debug_print_bytecode) debug.disassembleChunk(&chunk, "compiled code");
 
     var vm = VM{ .chunk = &chunk };
 
