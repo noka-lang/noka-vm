@@ -56,7 +56,12 @@ pub const TokenType = enum {
     // keywords
     @"and",
     @"or",
+    xor,
     not,
+    band,
+    bor,
+    bnot,
+    bxor,
     // literals
     number,
     true,
@@ -138,6 +143,13 @@ pub const Scanner = struct {
         // TODO: all the rest of the keywords
         return switch (self.src[self.start]) {
             'a' => self.checkKeyword(1, 2, "nd", .@"and"),
+            'b' => if (self.current - self.start > 1) switch (self.src[self.start + 1]) {
+                'a' => self.checkKeyword(2, 2, "nd", .band),
+                'n' => self.checkKeyword(2, 2, "ot", .bnot),
+                'o' => self.checkKeyword(2, 1, "r", .bor),
+                'x' => self.checkKeyword(2, 2, "or", .bxor),
+                else => .@"error",
+            } else .@"error",
             'f' => self.checkKeyword(1, 4, "alse", .false),
             'n' => if (self.current - self.start > 1) switch (self.src[self.start + 1]) {
                 'i' => self.checkKeyword(2, 1, "l", .nil),
@@ -146,6 +158,7 @@ pub const Scanner = struct {
             } else .@"error",
             'o' => self.checkKeyword(1, 1, "r", .@"or"),
             't' => self.checkKeyword(1, 3, "rue", .true),
+            'x' => self.checkKeyword(1, 2, "or", .xor),
             else => .@"error",
         };
     }

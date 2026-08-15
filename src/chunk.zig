@@ -20,6 +20,11 @@ pub const OpCode = enum(u8) {
     modulo,
     not,
     negate,
+    // binary operators
+    band,
+    bnot,
+    bor,
+    bxor,
     // TODO: label
     jump,
     jump_if_false,

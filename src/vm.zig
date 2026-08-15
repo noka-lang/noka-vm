@@ -134,6 +134,20 @@ const VM = struct {
         return self.chunk.constants[self.readByte()];
     }
 
+    fn toInt32(self: *VM, n: f64) ?i32 {
+        if (@trunc(n) != n) {
+            _ = self.runtimeError("bitwise operands must be whole numbers", .{});
+            return null;
+        }
+
+        if (n < std.math.minInt(i32) or n > std.math.maxInt(i32)) {
+            _ = self.runtimeError("bitwise operand out of range", .{});
+            return null;
+        }
+
+        return @intFromFloat(n);
+    }
+
     fn run(self: *VM) bool {
         while (true) {
             if (debug_trace_execution) {
@@ -184,6 +198,24 @@ const VM = struct {
                         else => unreachable,
                     } });
                 },
+                .band, .bor, .bxor => {
+                    const b = self.pop();
+                    const a = self.pop();
+
+                    if (a != .number or b != .number) {
+                        return self.runtimeError("cannot do binary {s} on {s} and {s}", .{ @tagName(op)[1..], a.typeName(), b.typeName() });
+                    }
+
+                    const ai = self.toInt32(a.number) orelse return false;
+                    const bi = self.toInt32(b.number) orelse return false;
+
+                    self.push(.{ .number = @floatFromInt(switch (op) {
+                        .band => ai & bi,
+                        .bor => ai | bi,
+                        .bxor => ai ^ bi,
+                        else => unreachable,
+                    }) });
+                },
                 .negate => {
                     const v = self.pop();
 
@@ -201,6 +233,16 @@ const VM = struct {
                     }
 
                     self.push(.{ .boolean = !v.boolean });
+                },
+                .bnot => {
+                    const v = self.pop();
+
+                    if (v != .number) {
+                        return self.runtimeError("cannot binary negate {s}", .{v.typeName()});
+                    }
+
+                    const vi = self.toInt32(v.number) orelse return false;
+                    self.push(.{ .number = @floatFromInt(~vi) });
                 },
                 .jump => {
                     const offset = self.readShort();

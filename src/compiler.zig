@@ -15,6 +15,9 @@ const Precedence = enum(u8) {
     assignment,
     @"or",
     @"and",
+    bor,
+    bxor,
+    band,
     equality,
     comparison,
     term,
@@ -106,6 +109,7 @@ pub const Compiler = struct {
 
         switch (op) {
             .bang => self.errorAtCurrent("! is not an operator, use 'not' for logical negation."),
+            .bnot => self.emitOp(.bnot),
             .minus => self.emitOp(.negate),
             .not => self.emitOp(.not),
             else => unreachable,
@@ -120,6 +124,9 @@ pub const Compiler = struct {
 
         switch (op) {
             .bang_equal => self.emitOps(.equal, .not),
+            .band => self.emitOp(.band),
+            .bor => self.emitOp(.bor),
+            .bxor => self.emitOp(.bxor),
             .equal_equal => self.emitOp(.equal),
             .greater => self.emitOp(.greater),
             .greater_equal => self.emitOps(.less, .not),
@@ -172,6 +179,10 @@ pub const Compiler = struct {
             .less =>            .{ .prefix = null,      .infix = &binary,   .precedence = .comparison },
             .less_equal =>      .{ .prefix = null,      .infix = &binary,   .precedence = .comparison },
             .@"and" =>          .{ .prefix = null,      .infix = &@"and",   .precedence = .@"and" },
+            .band =>            .{ .prefix = null,      .infix = &binary,   .precedence = .band },
+            .bnot =>            .{ .prefix = &unary,    .infix = null,      .precedence = .none },
+            .bor =>             .{ .prefix = null,      .infix = &binary,   .precedence = .bor },
+            .bxor =>            .{ .prefix = null,      .infix = &binary,   .precedence = .bxor },
             .not =>             .{ .prefix = &unary,    .infix = null,      .precedence = .none},
             .@"or" =>           .{ .prefix = null,      .infix = &@"or",    .precedence = .@"or" },
             .number =>          .{ .prefix = &number,   .infix = null,      .precedence = .none },
