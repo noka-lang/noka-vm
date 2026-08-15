@@ -5,6 +5,7 @@ const OpCode = @import("chunk.zig").OpCode;
 const Compiler = @import("compiler.zig").Compiler;
 const debug = @import("debug.zig");
 const Value = @import("value.zig").Value;
+const valuesEqual = @import("value.zig").valuesEqual;
 const printValue = @import("value.zig").printValue;
 const disc_mod = @import("disc.zig");
 
@@ -134,6 +135,25 @@ const VM = struct {
                 .nil => self.push(.nil),
                 .true => self.push(Value{ .boolean = true }),
                 .false => self.push(Value{ .boolean = false }),
+                .equal => {
+                    const b = self.pop();
+                    const a = self.pop();
+                    self.push(.{ .boolean = valuesEqual(a, b) });
+                },
+                .greater, .less => {
+                    const b = self.pop();
+                    const a = self.pop();
+
+                    if (a != .number or b != .number) {
+                        return self.runtimeError("cannot compare {s} and {s}", .{ a.typeName(), b.typeName() });
+                    }
+
+                    self.push(.{ .boolean = switch (op) {
+                        .greater => a.number > b.number,
+                        .less => a.number < b.number,
+                        else => unreachable,
+                    } });
+                },
                 .add, .subtract, .multiply, .divide => {
                     const b = self.pop();
                     const a = self.pop();

@@ -119,6 +119,12 @@ pub const Compiler = struct {
         self.parsePrecedence(@enumFromInt(@intFromEnum(rule.precedence) + 1));
 
         switch (op) {
+            .bang_equal => self.emitOps(.equal, .not),
+            .equal_equal => self.emitOp(.equal),
+            .greater => self.emitOp(.greater),
+            .greater_equal => self.emitOps(.less, .not),
+            .less => self.emitOp(.less),
+            .less_equal => self.emitOps(.greater, .not),
             .plus => self.emitOp(.add),
             .minus => self.emitOp(.subtract),
             .star => self.emitOp(.multiply),
@@ -139,6 +145,13 @@ pub const Compiler = struct {
             .star =>            .{ .prefix = null,      .infix = &binary,   .precedence = .factor },
             .slash =>           .{ .prefix = null,      .infix = &binary,   .precedence = .factor },
             .bang =>            .{ .prefix = &unary,    .infix = null,      .precedence = .none },
+            .bang_equal =>      .{ .prefix = null,      .infix = &binary,   .precedence = .equality },
+            .equal =>           .{ .prefix = null,      .infix = null,      .precedence = .none },
+            .equal_equal =>     .{ .prefix = null,      .infix = &binary,   .precedence = .equality },
+            .greater =>         .{ .prefix = null,      .infix = &binary,   .precedence = .comparison },
+            .greater_equal =>   .{ .prefix = null,      .infix = &binary,   .precedence = .comparison },
+            .less =>            .{ .prefix = null,      .infix = &binary,   .precedence = .comparison },
+            .less_equal =>      .{ .prefix = null,      .infix = &binary,   .precedence = .comparison },
             .not =>             .{ .prefix = &unary,    .infix = null,      .precedence = .none},
             .number =>          .{ .prefix = &number,   .infix = null,      .precedence = .none },
             .true =>            .{ .prefix = &literal,  .infix = null,      .precedence = .none },
@@ -178,6 +191,11 @@ pub const Compiler = struct {
 
     fn emitByte(self: *Compiler, byte: u8) void {
         self.chunk.writeByte(byte);
+    }
+
+    fn emitOps(self: *Compiler, op1: OpCode, op2: OpCode) void {
+        self.emitOp(op1);
+        self.emitOp(op2);
     }
 
     fn emitConstant(self: *Compiler, value: Value) void {
