@@ -1,3 +1,4 @@
+const std = @import("std");
 const io = @import("io.zig");
 
 pub const Value = union(enum) {
@@ -16,6 +17,16 @@ pub const Value = union(enum) {
     }
 };
 
+pub fn valuesEqual(a: Value, b: Value) bool {
+    if (std.meta.activeTag(a) != std.meta.activeTag(b)) return false;
+
+    return switch (a) {
+        .nil => true,
+        .boolean => a.boolean == b.boolean,
+        .number => a.number == b.number,
+    };
+}
+
 pub fn printValue(value: Value) void {
     switch (value) {
         .boolean => |b| io.printf("{}", .{b}),
@@ -23,17 +34,4 @@ pub fn printValue(value: Value) void {
         .nil => io.printf("nil", .{}),
         // TODO: string, array, object, function, error
     }
-}
-
-// TODO: marked for removal
-pub fn IS_BOOL(value: Value) bool {
-    return value == Value.boolean;
-}
-
-pub fn IS_NIL(value: Value) bool {
-    return value == Value.nil;
-}
-
-pub fn IS_NUMBER(value: Value) bool {
-    return value == Value.number;
 }
