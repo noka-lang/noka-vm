@@ -8,12 +8,55 @@ const std = @import("std");
 // numbers for diagnostics.
 pub const TokenType = enum {
     // single-character tokens
-    left_paren,
-    right_paren,
     plus,
     minus,
     star,
     slash,
+    modulo,
+    // equal,
+    // colon,
+    // pound,
+    bang,
+    equal,
+    greater,
+    less,
+    left_paren,
+    right_paren,
+    // left_bracket,
+    // right_bracket,
+    // left_curly,
+    // right_curly,
+    // comma,
+    // dot,
+    optional,
+    // two-character tokens
+    equal_equal,
+    bang_equal,
+    greater_equal,
+    less_equal,
+    // plus_equal,
+    // minus_equal,
+    // star_equal,
+    // slash_equal,
+    // modulo_equal,
+    star_star,
+    greater_greater,
+    less_less,
+    fallback,
+    // case_arrow,
+    // pipe_arrow,
+    // optional_dot,
+    // optional_left_bracket,
+    // optional_left_brace,
+    // optional_colon,
+    // three-character tokens
+    // star_star_equal,
+    // greater_greater_equal,
+    // less_less_equal,
+    // keywords
+    @"and",
+    @"or",
+    not,
     // literals
     number,
     true,
@@ -55,8 +98,14 @@ pub const Scanner = struct {
             ')' => self.make(.right_paren),
             '+' => self.make(.plus),
             '-' => self.make(.minus),
-            '*' => self.make(.star),
+            '*' => self.make(if (self.match('*')) .star_star else .star),
             '/' => self.make(.slash),
+            '%' => self.make(.modulo),
+            '?' => self.make(if (self.match('?')) .fallback else .optional),
+            '!' => self.make(if (self.match('=')) .bang_equal else .bang),
+            '=' => self.make(if (self.match('=')) .equal_equal else .equal),
+            '>' => self.make(if (self.match('=')) .greater_equal else if (self.match('>')) .greater_greater else .greater),
+            '<' => self.make(if (self.match('=')) .less_equal else if (self.match('<')) .less_less else .less),
             else => self.errorToken("unexpected character"),
         };
     }
@@ -87,12 +136,18 @@ pub const Scanner = struct {
 
     fn identifierType(self: Scanner) TokenType {
         // TODO: all the rest of the keywords
-        switch (self.src[self.start]) {
-            'f' => return self.checkKeyword(1, 4, "alse", .false),
-            'n' => return self.checkKeyword(1, 2, "il", .nil),
-            't' => return self.checkKeyword(1, 3, "rue", .true),
-            else => return .@"error",
-        }
+        return switch (self.src[self.start]) {
+            'a' => self.checkKeyword(1, 2, "nd", .@"and"),
+            'f' => self.checkKeyword(1, 4, "alse", .false),
+            'n' => if (self.current - self.start > 1) switch (self.src[self.start + 1]) {
+                'i' => self.checkKeyword(2, 1, "l", .nil),
+                'o' => self.checkKeyword(2, 1, "t", .not),
+                else => .@"error",
+            } else .@"error",
+            'o' => self.checkKeyword(1, 1, "r", .@"or"),
+            't' => self.checkKeyword(1, 3, "rue", .true),
+            else => .@"error",
+        };
     }
 
     fn checkKeyword(self: Scanner, start: usize, length: usize, rest: []const u8, @"type": TokenType) TokenType {
@@ -120,6 +175,14 @@ pub const Scanner = struct {
     fn peek(self: Scanner) u8 {
         if (self.isAtEnd()) return 0;
         return self.src[self.current];
+    }
+
+    fn match(self: *Scanner, expected: u8) bool {
+        if (self.isAtEnd()) return false;
+        if (self.src[self.current] != expected) return false;
+        self.current += 1;
+
+        return true;
     }
 
     fn isAtEnd(self: Scanner) bool {
