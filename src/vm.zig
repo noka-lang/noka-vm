@@ -134,9 +134,6 @@ const VM = struct {
                 .nil => self.push(.nil),
                 .true => self.push(Value{ .boolean = true }),
                 .false => self.push(Value{ .boolean = false }),
-                // TODO: binary ops currently assume two numbers. Once Value is
-                // a union, type-check operands and raise a runtime error on
-                // mismatch.
                 .add, .subtract, .multiply, .divide => {
                     const b = self.pop();
                     const a = self.pop();
@@ -161,6 +158,15 @@ const VM = struct {
                     }
 
                     self.push(.{ .number = -v.number });
+                },
+                .not => {
+                    const v = self.pop();
+
+                    if (v != .boolean) {
+                        return self.runtimeError("cannot logically negate {s}", .{v.typeName()});
+                    }
+
+                    self.push(.{ .boolean = !v.boolean });
                 },
                 .@"return" => {
                     // Temporary: print the result of the top-level expression.

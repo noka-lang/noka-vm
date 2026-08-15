@@ -92,9 +92,9 @@ pub const Compiler = struct {
 
     fn literal(self: *Compiler) void {
         switch (self.previous.type) {
-            .false => self.emitByte(@intFromEnum(OpCode.false)),
-            .nil => self.emitByte(@intFromEnum(OpCode.nil)),
-            .true => self.emitByte(@intFromEnum(OpCode.true)),
+            .false => self.emitOp(OpCode.false),
+            .nil => self.emitOp(OpCode.nil),
+            .true => self.emitOp(OpCode.true),
             else => unreachable,
         }
     }
@@ -105,7 +105,9 @@ pub const Compiler = struct {
         self.parsePrecedence(.unary);
 
         switch (op) {
+            .bang => self.errorAtCurrent("! is not an operator, use 'not' for logical negation."),
             .minus => self.emitOp(.negate),
+            .not => self.emitOp(.not),
             else => unreachable,
         }
     }
@@ -129,15 +131,20 @@ pub const Compiler = struct {
     // expression.
     fn getRule(t: TokenType) ParseRule {
         return switch (t) {
-            .left_paren => .{ .prefix = &grouping },
-            .minus => .{ .prefix = &unary, .infix = &binary, .precedence = .term },
-            .plus => .{ .infix = &binary, .precedence = .term },
-            .slash => .{ .infix = &binary, .precedence = .factor },
-            .star => .{ .infix = &binary, .precedence = .factor },
-            .number => .{ .prefix = &number },
-            .true => .{ .prefix = &literal },
-            .false => .{ .prefix = &literal },
-            .nil => .{ .prefix = &literal },
+            // zig fmt: off
+            .left_paren =>      .{ .prefix = &grouping, .infix = null,      .precedence = .none },
+            .right_paren =>     .{ .prefix = null,      .infix = null,      .precedence = .none },
+            .plus =>            .{ .prefix = null,      .infix = &binary,   .precedence = .term },
+            .minus =>           .{ .prefix = &unary,    .infix = &binary,   .precedence = .term },
+            .star =>            .{ .prefix = null,      .infix = &binary,   .precedence = .factor },
+            .slash =>           .{ .prefix = null,      .infix = &binary,   .precedence = .factor },
+            .bang =>            .{ .prefix = &unary,    .infix = null,      .precedence = .none },
+            .not =>             .{ .prefix = &unary,    .infix = null,      .precedence = .none},
+            .number =>          .{ .prefix = &number,   .infix = null,      .precedence = .none },
+            .true =>            .{ .prefix = &literal,  .infix = null,      .precedence = .none },
+            .false =>           .{ .prefix = &literal,  .infix = null,      .precedence = .none },
+            .nil =>             .{ .prefix = &literal,  .infix = null,      .precedence = .none },
+            // zig fmt: on
             else => .{},
         };
     }
@@ -165,12 +172,12 @@ pub const Compiler = struct {
 
     // --- emit helpers -------------------------------------------------------
 
-    fn emitByte(self: *Compiler, byte: u8) void {
-        self.chunk.writeByte(byte);
-    }
-
     fn emitOp(self: *Compiler, op: OpCode) void {
         self.chunk.writeOp(op);
+    }
+
+    fn emitByte(self: *Compiler, byte: u8) void {
+        self.chunk.writeByte(byte);
     }
 
     fn emitConstant(self: *Compiler, value: Value) void {
