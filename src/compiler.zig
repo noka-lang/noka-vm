@@ -133,6 +133,25 @@ pub const Compiler = struct {
         }
     }
 
+    fn @"and"(self: *Compiler) void {
+        const endJump = self.emitJump(.jump_if_false);
+
+        self.emitOp(.pop);
+        self.parsePrecedence(.@"and");
+        self.patchJump(endJump);
+    }
+
+    fn @"or"(self: *Compiler) void {
+        const elseJump = self.emitJump(.jump_if_false);
+        const endJump = self.emitJump(.jump);
+
+        self.patchJump(elseJump);
+        self.emitOp(.pop);
+
+        self.parsePrecedence(.@"or");
+        self.patchJump(endJump);
+    }
+
     // TODO: add an entry for every new token type that can start or join an
     // expression.
     fn getRule(t: TokenType) ParseRule {
@@ -152,7 +171,9 @@ pub const Compiler = struct {
             .greater_equal =>   .{ .prefix = null,      .infix = &binary,   .precedence = .comparison },
             .less =>            .{ .prefix = null,      .infix = &binary,   .precedence = .comparison },
             .less_equal =>      .{ .prefix = null,      .infix = &binary,   .precedence = .comparison },
+            .@"and" =>          .{ .prefix = null,      .infix = &@"and",   .precedence = .@"and" },
             .not =>             .{ .prefix = &unary,    .infix = null,      .precedence = .none},
+            .@"or" =>           .{ .prefix = null,      .infix = &@"or",    .precedence = .@"or" },
             .number =>          .{ .prefix = &number,   .infix = null,      .precedence = .none },
             .true =>            .{ .prefix = &literal,  .infix = null,      .precedence = .none },
             .false =>           .{ .prefix = &literal,  .infix = null,      .precedence = .none },
@@ -201,6 +222,25 @@ pub const Compiler = struct {
     fn emitConstant(self: *Compiler, value: Value) void {
         self.emitOp(.constant);
         self.emitByte(self.chunk.addConstant(value));
+    }
+
+    fn emitJump(self: *Compiler, op: OpCode) usize {
+        self.emitOp(op);
+        self.emitByte(0xff);
+        self.emitByte(0xff);
+
+        return self.chunk.code_count - 2;
+    }
+
+    fn patchJump(self: *Compiler, offset: usize) void {
+        const jump = self.chunk.code_count - offset - 2;
+
+        if (jump > self.chunk.code.len - 1) {
+            self.errorAtCurrent("Jump too large.");
+        }
+
+        self.chunk.code[offset] = @intCast((jump >> 8) & 0xff);
+        self.chunk.code[offset + 1] = @intCast(jump & 0xff);
     }
 
     // --- error reporting ----------------------------------------------------

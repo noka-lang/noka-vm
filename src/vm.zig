@@ -113,10 +113,21 @@ const VM = struct {
         return self.stack[self.sp];
     }
 
+    fn peek(self: *VM, distance: usize) Value {
+        return self.stack[self.sp - 1 - distance];
+    }
+
     fn readByte(self: *VM) u8 {
         const byte = self.chunk.code[self.ip];
         self.ip += 1;
         return byte;
+    }
+
+    fn readShort(self: *VM) u16 {
+        const hi: u16 = self.readByte();
+        const lo: u16 = self.readByte();
+
+        return (hi << 8) | lo;
     }
 
     fn readConstant(self: *VM) Value {
@@ -135,6 +146,9 @@ const VM = struct {
                 .nil => self.push(.nil),
                 .true => self.push(Value{ .boolean = true }),
                 .false => self.push(Value{ .boolean = false }),
+                .pop => {
+                    _ = self.pop();
+                },
                 .equal => {
                     const b = self.pop();
                     const a = self.pop();
@@ -187,6 +201,19 @@ const VM = struct {
                     }
 
                     self.push(.{ .boolean = !v.boolean });
+                },
+                .jump => {
+                    const offset = self.readShort();
+                    self.ip += offset;
+                },
+                .jump_if_false => {
+                    const offset = self.readShort();
+                    const cond = self.peek(0);
+                    if (cond != .boolean) {
+                        return self.runtimeError("condition must be a boolean, got a {s}.", .{cond.typeName()});
+                    }
+
+                    if (cond.boolean == false) self.ip += offset;
                 },
                 .@"return" => {
                     // Temporary: print the result of the top-level expression.

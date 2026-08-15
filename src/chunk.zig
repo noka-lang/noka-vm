@@ -7,6 +7,8 @@ pub const OpCode = enum(u8) {
     // booleans
     true,
     false,
+    // TODO: label
+    pop,
     // operators
     equal,
     greater,
@@ -18,6 +20,9 @@ pub const OpCode = enum(u8) {
     modulo,
     not,
     negate,
+    // TODO: label
+    jump,
+    jump_if_false,
     print,
     @"return",
     _,
