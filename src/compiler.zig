@@ -47,11 +47,11 @@ pub const Compiler = struct {
         var parser = Compiler{ .scanner = Scanner.init(source), .chunk = chunk };
         parser.advance();
         parser.expression();
-        parser.consume(.eof, "expected end of expression");
+        parser.consume(.eof, "expected end of expression.");
         parser.emitOp(.@"return");
 
         if (chunk.overflow) {
-            io.print("compile error: program too large\n");
+            io.print("compile error: program too large.\n");
             return false;
         }
 
@@ -65,7 +65,7 @@ pub const Compiler = struct {
     fn parsePrecedence(self: *Compiler, prec: Precedence) void {
         self.advance();
         const prefix_rule = getRule(self.previous.type).prefix orelse {
-            self.errorAtPrevious("expected an expression");
+            self.errorAtPrevious("expected expression");
             return;
         };
         prefix_rule(self);
@@ -81,7 +81,7 @@ pub const Compiler = struct {
 
     fn number(self: *Compiler) void {
         const v: Value = Value{ .number = std.fmt.parseFloat(f64, self.previous.lexeme) catch {
-            self.errorAtPrevious("invalid number");
+            self.errorAtPreviousFmt("expected number, got '{s}'", .{self.previous.lexeme});
             return;
         } };
 
@@ -108,7 +108,7 @@ pub const Compiler = struct {
         self.parsePrecedence(.unary);
 
         switch (op) {
-            .bang => self.errorAtCurrent("! is not an operator, use 'not' for logical negation."),
+            .bang => self.errorAtCurrent("'!' is not an operator, use 'not' for logical negation"),
             .bnot => self.emitOp(.bnot),
             .minus => self.emitOp(.negate),
             .not => self.emitOp(.not),
@@ -202,7 +202,7 @@ pub const Compiler = struct {
         while (true) {
             self.current = self.scanner.next();
             if (self.current.type != .@"error") break;
-            self.errorAtCurrent(self.current.lexeme);
+            self.errorAtCurrent("unexpected character");
         }
     }
 
@@ -247,7 +247,7 @@ pub const Compiler = struct {
         const jump = self.chunk.code_count - offset - 2;
 
         if (jump > self.chunk.code.len - 1) {
-            self.errorAtCurrent("Jump too large.");
+            self.errorAtCurrentFmt("expected jump under 65535 bytes, got {d}", .{jump});
         }
 
         self.chunk.code[offset] = @intCast((jump >> 8) & 0xff);
@@ -266,15 +266,27 @@ pub const Compiler = struct {
         self.errorAt(self.previous, msg);
     }
 
+    // `++` only concatenates comptime-known values, so messages that interpolate
+    // a token or a count have to be formatted into a buffer at runtime.
+    fn errorAtCurrentFmt(self: *Compiler, comptime fmt: []const u8, args: anytype) void {
+        var buf: [256]u8 = undefined;
+        self.errorAt(self.current, std.fmt.bufPrint(&buf, fmt, args) catch fmt);
+    }
+
+    fn errorAtPreviousFmt(self: *Compiler, comptime fmt: []const u8, args: anytype) void {
+        var buf: [256]u8 = undefined;
+        self.errorAt(self.previous, std.fmt.bufPrint(&buf, fmt, args) catch fmt);
+    }
+
     fn errorAt(self: *Compiler, token: Token, msg: []const u8) void {
         if (self.panic_mode) return;
         self.panic_mode = true;
         self.had_error = true;
 
         if (token.type == .eof) {
-            io.printf("compile error at end: {s}\n", .{msg});
+            io.printf("compile error at end: {s}.\n", .{msg});
         } else {
-            io.printf("compile error at '{s}': {s}\n", .{ token.lexeme, msg });
+            io.printf("compile error at '{s}': {s}.\n", .{ token.lexeme, msg });
         }
     }
 };

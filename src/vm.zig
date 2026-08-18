@@ -9,8 +9,8 @@ const valuesEqual = @import("value.zig").valuesEqual;
 const printValue = @import("value.zig").printValue;
 const disc_mod = @import("disc.zig");
 
-const debug_print_bytecode = true;
-const debug_trace_execution = true;
+const debug_print_bytecode = false;
+const debug_trace_execution = false;
 
 var heap_buffer: [1 << 20]u8 = undefined; // 1 MiB
 var fba = std.heap.FixedBufferAllocator.init(&heap_buffer);
@@ -37,7 +37,7 @@ var chunk: Chunk = undefined;
 /// The host calls `init()` before calling this.
 export fn eval(len: usize) i32 {
     if (len > disc.len) {
-        io.print("disc error: source too large\n");
+        io.print("disc error: source too large.\n");
         return 1;
     }
 
@@ -49,17 +49,17 @@ export fn eval(len: usize) i32 {
 /// The host calls `init()` before calling this.
 export fn load_disc(len: usize) i32 {
     if (len > disc.len) {
-        io.print("disc error: disc too large\n");
+        io.print("disc error: disc too large.\n");
         return 1;
     }
 
     const header = disc_mod.parse(disc[0..len]) catch |e| {
-        io.printf("disc error: {s}\n", .{disc_mod.describe(e)});
+        io.printf("disc error: {s}.\n", .{disc_mod.describe(e)});
         return 1;
     };
 
     const src = header.section(disc[0..len], .src) orelse {
-        io.print("disc error: disc has no source\n");
+        io.print("disc error: disc has no source.\n");
         return 1;
     };
 
@@ -136,12 +136,12 @@ const VM = struct {
 
     fn toInt32(self: *VM, n: f64) ?i32 {
         if (@trunc(n) != n) {
-            _ = self.runtimeError("bitwise operands must be whole numbers", .{});
+            _ = self.runtimeError("bitwise expected whole number, got {d}.", .{n});
             return null;
         }
 
         if (n < std.math.minInt(i32) or n > std.math.maxInt(i32)) {
-            _ = self.runtimeError("bitwise operand out of range", .{});
+            _ = self.runtimeError("bitwise expected 32-bit number, got {d}.", .{n});
             return null;
         }
 
@@ -173,7 +173,7 @@ const VM = struct {
                     const a = self.pop();
 
                     if (a != .number or b != .number) {
-                        return self.runtimeError("cannot compare {s} and {s}", .{ a.typeName(), b.typeName() });
+                        return self.runtimeError("compare expected two numbers, got {s} and {s}.", .{ a.typeName(), b.typeName() });
                     }
 
                     self.push(.{ .boolean = switch (op) {
@@ -187,7 +187,7 @@ const VM = struct {
                     const a = self.pop();
 
                     if (a != .number or b != .number) {
-                        return self.runtimeError("cannot {s} {s} and {s}", .{ @tagName(op), a.typeName(), b.typeName() });
+                        return self.runtimeError("'{s}' expected two numbers, got {s} and {s}.", .{ @tagName(op), a.typeName(), b.typeName() });
                     }
 
                     self.push(.{ .number = switch (op) {
@@ -203,7 +203,7 @@ const VM = struct {
                     const a = self.pop();
 
                     if (a != .number or b != .number) {
-                        return self.runtimeError("cannot do binary {s} on {s} and {s}", .{ @tagName(op)[1..], a.typeName(), b.typeName() });
+                        return self.runtimeError("'{s}' expected two numbers, got {s} and {s}.", .{ @tagName(op), a.typeName(), b.typeName() });
                     }
 
                     const ai = self.toInt32(a.number) orelse return false;
@@ -220,7 +220,7 @@ const VM = struct {
                     const v = self.pop();
 
                     if (v != .number) {
-                        return self.runtimeError("cannot negate {s}", .{v.typeName()});
+                        return self.runtimeError("negate expected number, got {s}.", .{v.typeName()});
                     }
 
                     self.push(.{ .number = -v.number });
@@ -229,7 +229,7 @@ const VM = struct {
                     const v = self.pop();
 
                     if (v != .boolean) {
-                        return self.runtimeError("cannot logically negate {s}", .{v.typeName()});
+                        return self.runtimeError("'not' expected boolean, got {s}.", .{v.typeName()});
                     }
 
                     self.push(.{ .boolean = !v.boolean });
@@ -238,7 +238,7 @@ const VM = struct {
                     const v = self.pop();
 
                     if (v != .number) {
-                        return self.runtimeError("cannot binary negate {s}", .{v.typeName()});
+                        return self.runtimeError("'bnot' expected number, got {s}.", .{v.typeName()});
                     }
 
                     const vi = self.toInt32(v.number) orelse return false;
@@ -252,7 +252,7 @@ const VM = struct {
                     const offset = self.readShort();
                     const cond = self.peek(0);
                     if (cond != .boolean) {
-                        return self.runtimeError("condition must be a boolean, got a {s}.", .{cond.typeName()});
+                        return self.runtimeError("condition expected boolean, got {s}.", .{cond.typeName()});
                     }
 
                     if (cond.boolean == false) self.ip += offset;
@@ -267,7 +267,7 @@ const VM = struct {
                     return true;
                 },
                 else => {
-                    io.print("runtime error: unknown opcode\n");
+                    io.printf("runtime error: unknown opcode {d}.\n", .{op});
                     return false;
                 },
             }
@@ -292,7 +292,7 @@ fn expectOutput(source: []const u8, expected: []const u8) !void {
     defer io.endCapture();
     const code = interpretSource(source);
 
-    try testing.expectEqualStrings(expected, io.captured());
+    try testing.expectEqualStrings(expected, std.mem.trimEnd(u8, io.captured(), "\n"));
     try testing.expectEqual(@as(i32, 0), code);
 }
 
@@ -305,52 +305,112 @@ fn expectFailure(source: []const u8, expected: []const u8) !void {
     try testing.expectEqual(@as(i32, 1), code);
 }
 
+test "ignore spaces" {
+    try expectOutput("2<3", "true");
+    try expectOutput("2 < 3", "true");
+}
+
 test "literals" {
-    try expectOutput("true", "true\n");
-    try expectOutput("false", "false\n");
-    try expectOutput("nil", "nil\n");
-    try expectOutput("42", "42\n");
-    try expectOutput("3.14", "3.14\n");
+    try expectOutput("true", "true");
+    try expectOutput("false", "false");
+    try expectOutput("nil", "nil");
+    try expectOutput("42", "42");
+    try expectOutput("3.14", "3.14");
 }
 
 test "arithmetic" {
-    try expectOutput("1 + 2", "3\n");
-    try expectOutput("7 - 9", "-2\n");
-    try expectOutput("6 * 7", "42\n");
-    try expectOutput("10 / 4", "2.5\n");
+    try expectOutput("1 + 2", "3");
+    try expectOutput("7 - 9", "-2");
+    try expectOutput("6 * 7", "42");
+    try expectOutput("10 / 4", "2.5");
+}
+
+test "equality" {
+    try expectOutput("1 == 1", "true");
+    try expectOutput("1 != 2", "true");
+    try expectOutput("true == true", "true");
+    try expectOutput("nil == nil", "true");
+    try expectOutput("nil == false", "false");
+    try expectOutput("1 == true", "false");
+}
+
+test "comparison" {
+    try expectOutput("1 < 2", "true");
+    try expectOutput("2 > 1", "true");
+    try expectOutput("3 <= 4", "true");
+    try expectOutput("4 >= 3", "true");
+    try expectOutput("5 <= 5", "true");
+    try expectOutput("6 >= 6", "true");
+    try expectFailure("1 < true", "runtime error: compare expected two numbers, got number and boolean.\n");
+}
+
+test "boolean logical operators" {
+    try expectOutput("not true", "false");
+    try expectOutput("not false", "true");
+    try expectOutput("true and true", "true");
+    try expectOutput("true and false", "false");
+    try expectOutput("false and true", "false");
+    try expectOutput("false and false", "false");
+    try expectOutput("true or true", "true");
+    try expectOutput("true or false", "true");
+    try expectOutput("false or true", "true");
+    try expectOutput("false or false", "false");
+    try expectFailure("not 1", "runtime error: 'not' expected boolean, got number.\n");
+    try expectFailure("1 and 2", "runtime error: condition expected boolean, got number.\n");
+    try expectFailure("true band 1", "runtime error: 'band' expected two numbers, got boolean and number.\n");
+    try expectFailure("1.5 band 2", "runtime error: bitwise expected whole number, got 1.5.\n");
+    try expectFailure("5000000000 bor 1", "runtime error: bitwise expected 32-bit number, got 5000000000.\n");
+    try expectFailure("!true", "compile error at end: '!' is not an operator, use 'not' for logical negation.\n");
+}
+
+test "bitwise logical operators" {
+    try expectOutput("12 band 10", "8");
+    try expectOutput("12 bor 10", "14");
+    try expectOutput("12 bxor 10", "6");
+    try expectOutput("bnot -3", "2");
+    try expectOutput("bnot 0", "-1");
+    try expectOutput("1 bor 2 band 3", "3");
+}
+
+test "short-circuiting operators" {
+    try expectOutput("false and (1 + true)", "false");
+    try expectFailure("true and (1 + true)", "runtime error: 'add' expected two numbers, got number and boolean.\n");
+    try expectOutput("true or (1 + true)", "true");
+    try expectFailure("false or (1 + true)", "runtime error: 'add' expected two numbers, got number and boolean.\n");
 }
 
 test "arithmetic on non-numbers is a runtime error" {
-    try expectFailure("1 + true", "runtime error: cannot add number and boolean\n");
-    try expectFailure("nil - false", "runtime error: cannot subtract nil and boolean\n");
-    try expectFailure("3 * true", "runtime error: cannot multiply number and boolean\n");
-    try expectFailure("false / 4", "runtime error: cannot divide boolean and number\n");
+    try expectFailure("1 + true", "runtime error: 'add' expected two numbers, got number and boolean.\n");
+    try expectFailure("nil - false", "runtime error: 'subtract' expected two numbers, got nil and boolean.\n");
+    try expectFailure("3 * true", "runtime error: 'multiply' expected two numbers, got number and boolean.\n");
+    try expectFailure("false / 4", "runtime error: 'divide' expected two numbers, got boolean and number.\n");
 }
 
 test "negating a non-number is a runtime error" {
-    try expectFailure("-true", "runtime error: cannot negate boolean\n");
-    try expectFailure("-nil", "runtime error: cannot negate nil\n");
+    try expectFailure("-true", "runtime error: negate expected number, got boolean.\n");
+    try expectFailure("-nil", "runtime error: negate expected number, got nil.\n");
 }
 
 test "precedence and grouping" {
-    try expectOutput("1 + 2 * 3", "7\n");
-    try expectOutput("(1 + 2) * 3", "9\n");
-    try expectOutput("8 / 4 / 2", "1\n");
+    try expectOutput("1 - 2 - 3", "-4");
+    try expectOutput("1 + 2 * 3", "7");
+    try expectOutput("(1 + 2) * 3", "9");
+    try expectOutput("8 / 4 / 2", "1");
+    try expectOutput("2 < 3 == true", "true");
+    try expectOutput("not true == false", "true");
+    //TODO: one case per bitwise level against equality, mirroring LANGUAGE.md's table
 }
 
 test "unary minus" {
-    try expectOutput("-5", "-5\n");
-    try expectOutput("--5", "5\n");
-    try expectOutput("-2 * 3", "-6\n");
+    try expectOutput("-5", "-5");
+    try expectOutput("--5", "5");
+    try expectOutput("-2 * 3", "-6");
 }
 
 test "compile errors are reported, not executed" {
-    try expectFailure("(1 + 2", "compile error at end: expected ')' after expression\n");
-    try expectFailure("1 +", "compile error at end: expected an expression\n");
-    // Scanner error tokens awkwardly carry their message in `lexeme`, so it lands where
-    // the offending text would normally go. Pinned here so a fix shows up as
-    // a deliberate test change.
-    try expectFailure("$", "compile error at 'unexpected character': unexpected character\n");
+    try expectFailure("(1 + 2", "compile error at end: expected ')' after expression.\n");
+    try expectFailure("1 +", "compile error at end: expected expression.\n");
+    try expectFailure("$", "compile error at '$': unexpected character.\n");
 }
 
 test "interpretSource returns nonzero on failure" {
@@ -364,14 +424,14 @@ test "eval rejects a length past the disc size" {
     io.beginCapture();
     defer io.endCapture();
     try testing.expectEqual(@as(i32, 1), eval(disc.len + 1));
-    try testing.expectEqualStrings("disc error: source too large\n", io.captured());
+    try testing.expectEqualStrings("disc error: source too large.\n", io.captured());
 }
 
 test "load_disc rejects a length past the disc size" {
     io.beginCapture();
     defer io.endCapture();
     try testing.expectEqual(@as(i32, 1), load_disc(disc.len + 1));
-    try testing.expectEqualStrings("disc error: disc too large\n", io.captured());
+    try testing.expectEqualStrings("disc error: disc too large.\n", io.captured());
 }
 
 test "load_disc runs a disc's source" {
@@ -390,7 +450,7 @@ test "corrupt disc fails to run" {
     io.beginCapture();
     defer io.endCapture();
     try testing.expectEqual(@as(i32, 1), load_disc(image.len));
-    try testing.expectEqualStrings("disc error: invalid magic header\n", io.captured());
+    try testing.expectEqualStrings("disc error: invalid magic header.\n", io.captured());
 }
 
 test "disc with no source fails to run" {
@@ -400,5 +460,5 @@ test "disc with no source fails to run" {
     io.beginCapture();
     defer io.endCapture();
     try testing.expectEqual(@as(i32, 1), load_disc(image.len));
-    try testing.expectEqualStrings("disc error: disc has no source\n", io.captured());
+    try testing.expectEqualStrings("disc error: disc has no source.\n", io.captured());
 }

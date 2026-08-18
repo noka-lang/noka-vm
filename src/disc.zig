@@ -108,7 +108,7 @@ pub fn describe(e: ParseError) []const u8 {
         ParseError.UnsupportedVersion => "unsupported major version",
         ParseError.Compressed => "compressed disc not supported yet",
         ParseError.BadSection => "section extends past payload",
-        ParseError.DiscTooLarge => "disk too large",
+        ParseError.DiscTooLarge => "disc too large",
     };
 }
 
