@@ -131,7 +131,7 @@ const VM = struct {
     }
 
     fn readConstant(self: *VM) Value {
-        return self.chunk.constants[self.readByte()];
+        return self.chunk.constants[self.readShort()];
     }
 
     fn toInt32(self: *VM, n: f64) ?i32 {

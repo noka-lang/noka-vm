@@ -47,7 +47,7 @@ pub const Compiler = struct {
         var parser = Compiler{ .scanner = Scanner.init(source), .chunk = chunk };
         parser.advance();
         parser.expression();
-        parser.consume(.eof, "expected end of expression.");
+        parser.consume(.eof, "expected end of expression");
         parser.emitOp(.@"return");
 
         if (chunk.overflow) {
@@ -231,8 +231,10 @@ pub const Compiler = struct {
     }
 
     fn emitConstant(self: *Compiler, value: Value) void {
+        const v = self.chunk.addConstant(value) orelse return;
         self.emitOp(.constant);
-        self.emitByte(self.chunk.addConstant(value));
+        self.emitByte(@intCast((v >> 8) & 0xff));
+        self.emitByte(@intCast(v & 0xff));
     }
 
     fn emitJump(self: *Compiler, op: OpCode) usize {

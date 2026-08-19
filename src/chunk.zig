@@ -59,10 +59,10 @@ pub const Chunk = struct {
 
     /// Add a constant and return its index. On overflow returns 0 and flags
     /// the chunk.
-    pub fn addConstant(self: *Chunk, value: Value) u8 {
+    pub fn addConstant(self: *Chunk, value: Value) ?u16 {
         if (self.const_count >= const_max) {
             self.overflow = true;
-            return 0;
+            return null;
         }
         self.constants[self.const_count] = value;
         self.const_count += 1;
