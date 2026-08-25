@@ -45,6 +45,8 @@ pub fn disassembleInstruction(chunk: *const Chunk, offset: usize) usize {
         .bnot => simpleInstruction("OP_BNOT", offset),
         .bor => simpleInstruction("OP_BOR", offset),
         .bxor => simpleInstruction("OP_BXOR", offset),
+        .shift_left => simpleInstruction("OP_SHIFT_LEFT", offset),
+        .shift_right => simpleInstruction("OP_SHIFT_RIGHT", offset),
         .jump => jumpInstruction("OP_JUMP", 1, chunk, offset),
         .jump_if_false => jumpInstruction("OP_JUMP_IF_FALSE", 1, chunk, offset),
         .print => simpleInstruction("OP_PRINT", offset),

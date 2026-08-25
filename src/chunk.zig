@@ -28,6 +28,8 @@ pub const OpCode = enum(u8) {
     bnot,
     bor,
     bxor,
+    shift_left,
+    shift_right,
     // TODO: label
     jump,
     jump_if_false,

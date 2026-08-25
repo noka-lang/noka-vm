@@ -200,7 +200,7 @@ const VM = struct {
                         else => unreachable,
                     } });
                 },
-                .band, .bor, .bxor => {
+                .band, .bor, .bxor, .shift_left, .shift_right => {
                     const b = self.pop();
                     const a = self.pop();
 
@@ -211,10 +211,22 @@ const VM = struct {
                     const ai = self.toInt32(a.number) orelse return false;
                     const bi = self.toInt32(b.number) orelse return false;
 
+                    const sh: u5 = switch (op) {
+                        .shift_left, .shift_right => blk: {
+                            if (bi < 0 or bi > 31) {
+                                return self.runtimeError("'{s}' expected shift of 0-31, got {d}.", .{ @tagName(op), bi });
+                            }
+                            break :blk @intCast(bi);
+                        },
+                        else => 0,
+                    };
+
                     self.push(.{ .number = @floatFromInt(switch (op) {
                         .band => ai & bi,
                         .bor => ai | bi,
                         .bxor => ai ^ bi,
+                        .shift_left => ai << sh,
+                        .shift_right => ai >> sh,
                         else => unreachable,
                     }) });
                 },
@@ -401,6 +413,7 @@ test "precedence and grouping" {
     try expectOutput("2 < 3 == true", "true");
     try expectOutput("not true == false", "true");
     try expectOutput("2 * 3 ** 2", "18");
+    try expectOutput("1 << 2 + 1", "8");
     //TODO: one case per bitwise level against equality, mirroring LANGUAGE.md's table
 }
 
@@ -411,6 +424,11 @@ test "right-associativity" {
 test "modulo" {
     try expectOutput("8 % 3", "2");
     try expectOutput("-7 % 3", "-1");
+}
+
+test "shift" {
+    try expectOutput("2 << 3", "16");
+    try expectOutput("-8 >> 1", "-4");
 }
 
 test "unary minus" {
