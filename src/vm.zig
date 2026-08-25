@@ -301,7 +301,7 @@ fn expectFailure(source: []const u8, expected: []const u8) !void {
     defer io.endCapture();
     const code = interpretSource(source);
 
-    try testing.expectEqualStrings(expected, io.captured());
+    try testing.expectEqualStrings(expected, std.mem.trimEnd(u8, io.captured(), "\n"));
     try testing.expectEqual(@as(i32, 1), code);
 }
 
@@ -341,7 +341,7 @@ test "comparison" {
     try expectOutput("4 >= 3", "true");
     try expectOutput("5 <= 5", "true");
     try expectOutput("6 >= 6", "true");
-    try expectFailure("1 < true", "runtime error: compare expected two numbers, got number and boolean.\n");
+    try expectFailure("1 < true", "runtime error: compare expected two numbers, got number and boolean.");
 }
 
 test "boolean logical operators" {
@@ -355,12 +355,12 @@ test "boolean logical operators" {
     try expectOutput("true or false", "true");
     try expectOutput("false or true", "true");
     try expectOutput("false or false", "false");
-    try expectFailure("not 1", "runtime error: 'not' expected boolean, got number.\n");
-    try expectFailure("1 and 2", "runtime error: condition expected boolean, got number.\n");
-    try expectFailure("true band 1", "runtime error: 'band' expected two numbers, got boolean and number.\n");
-    try expectFailure("1.5 band 2", "runtime error: bitwise expected whole number, got 1.5.\n");
-    try expectFailure("5000000000 bor 1", "runtime error: bitwise expected 32-bit number, got 5000000000.\n");
-    try expectFailure("!true", "compile error at end: '!' is not an operator, use 'not' for logical negation.\n");
+    try expectFailure("not 1", "runtime error: 'not' expected boolean, got number.");
+    try expectFailure("1 and 2", "runtime error: condition expected boolean, got number.");
+    try expectFailure("true band 1", "runtime error: 'band' expected two numbers, got boolean and number.");
+    try expectFailure("1.5 band 2", "runtime error: bitwise expected whole number, got 1.5.");
+    try expectFailure("5000000000 bor 1", "runtime error: bitwise expected 32-bit number, got 5000000000.");
+    try expectFailure("!true", "compile error at end: '!' is not an operator, use 'not' for logical negation.");
 }
 
 test "bitwise logical operators" {
@@ -374,21 +374,21 @@ test "bitwise logical operators" {
 
 test "short-circuiting operators" {
     try expectOutput("false and (1 + true)", "false");
-    try expectFailure("true and (1 + true)", "runtime error: 'add' expected two numbers, got number and boolean.\n");
+    try expectFailure("true and (1 + true)", "runtime error: 'add' expected two numbers, got number and boolean.");
     try expectOutput("true or (1 + true)", "true");
-    try expectFailure("false or (1 + true)", "runtime error: 'add' expected two numbers, got number and boolean.\n");
+    try expectFailure("false or (1 + true)", "runtime error: 'add' expected two numbers, got number and boolean.");
 }
 
 test "arithmetic on non-numbers is a runtime error" {
-    try expectFailure("1 + true", "runtime error: 'add' expected two numbers, got number and boolean.\n");
-    try expectFailure("nil - false", "runtime error: 'subtract' expected two numbers, got nil and boolean.\n");
-    try expectFailure("3 * true", "runtime error: 'multiply' expected two numbers, got number and boolean.\n");
-    try expectFailure("false / 4", "runtime error: 'divide' expected two numbers, got boolean and number.\n");
+    try expectFailure("1 + true", "runtime error: 'add' expected two numbers, got number and boolean.");
+    try expectFailure("nil - false", "runtime error: 'subtract' expected two numbers, got nil and boolean.");
+    try expectFailure("3 * true", "runtime error: 'multiply' expected two numbers, got number and boolean.");
+    try expectFailure("false / 4", "runtime error: 'divide' expected two numbers, got boolean and number.");
 }
 
 test "negating a non-number is a runtime error" {
-    try expectFailure("-true", "runtime error: negate expected number, got boolean.\n");
-    try expectFailure("-nil", "runtime error: negate expected number, got nil.\n");
+    try expectFailure("-true", "runtime error: negate expected number, got boolean.");
+    try expectFailure("-nil", "runtime error: negate expected number, got nil.");
 }
 
 test "precedence and grouping" {
@@ -408,9 +408,9 @@ test "unary minus" {
 }
 
 test "compile errors are reported, not executed" {
-    try expectFailure("(1 + 2", "compile error at end: expected ')' after expression.\n");
-    try expectFailure("1 +", "compile error at end: expected expression.\n");
-    try expectFailure("$", "compile error at '$': unexpected character.\n");
+    try expectFailure("(1 + 2", "compile error at end: expected ')' after expression.");
+    try expectFailure("1 +", "compile error at end: expected expression.");
+    try expectFailure("$", "compile error at '$': unexpected character.");
 }
 
 test "interpretSource returns nonzero on failure" {
