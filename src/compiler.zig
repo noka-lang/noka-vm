@@ -136,6 +136,7 @@ pub const Compiler = struct {
             .minus => self.emitOp(.subtract),
             .star => self.emitOp(.multiply),
             .slash => self.emitOp(.divide),
+            .modulo => self.emitOp(.modulo),
             else => unreachable,
         }
     }
@@ -170,6 +171,7 @@ pub const Compiler = struct {
             .minus =>           .{ .prefix = &unary,    .infix = &binary,   .precedence = .term },
             .star =>            .{ .prefix = null,      .infix = &binary,   .precedence = .factor },
             .slash =>           .{ .prefix = null,      .infix = &binary,   .precedence = .factor },
+            .modulo =>          .{ .prefix = null,      .infix = &binary,   .precedence = .factor },
             .bang =>            .{ .prefix = &unary,    .infix = null,      .precedence = .none },
             .bang_equal =>      .{ .prefix = null,      .infix = &binary,   .precedence = .equality },
             .equal =>           .{ .prefix = null,      .infix = null,      .precedence = .none },

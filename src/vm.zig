@@ -182,7 +182,7 @@ const VM = struct {
                         else => unreachable,
                     } });
                 },
-                .add, .subtract, .multiply, .divide => {
+                .add, .subtract, .multiply, .divide, .modulo => {
                     const b = self.pop();
                     const a = self.pop();
 
@@ -195,6 +195,7 @@ const VM = struct {
                         .subtract => a.number - b.number,
                         .multiply => a.number * b.number,
                         .divide => a.number / b.number,
+                        .modulo => @rem(a.number, b.number),
                         else => unreachable,
                     } });
                 },
@@ -399,6 +400,11 @@ test "precedence and grouping" {
     try expectOutput("2 < 3 == true", "true");
     try expectOutput("not true == false", "true");
     //TODO: one case per bitwise level against equality, mirroring LANGUAGE.md's table
+}
+
+test "modulo" {
+    try expectOutput("8 % 3", "2");
+    try expectOutput("-7 % 3", "-1");
 }
 
 test "unary minus" {
