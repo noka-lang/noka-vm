@@ -20,6 +20,7 @@ pub const OpCode = enum(u8) {
     multiply,
     divide,
     modulo,
+    exponent,
     not,
     negate,
     // binary operators

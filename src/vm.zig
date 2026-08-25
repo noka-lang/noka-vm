@@ -182,7 +182,7 @@ const VM = struct {
                         else => unreachable,
                     } });
                 },
-                .add, .subtract, .multiply, .divide, .modulo => {
+                .add, .subtract, .multiply, .divide, .modulo, .exponent => {
                     const b = self.pop();
                     const a = self.pop();
 
@@ -196,6 +196,7 @@ const VM = struct {
                         .multiply => a.number * b.number,
                         .divide => a.number / b.number,
                         .modulo => @rem(a.number, b.number),
+                        .exponent => std.math.pow(f64, a.number, b.number),
                         else => unreachable,
                     } });
                 },
@@ -399,7 +400,12 @@ test "precedence and grouping" {
     try expectOutput("8 / 4 / 2", "1");
     try expectOutput("2 < 3 == true", "true");
     try expectOutput("not true == false", "true");
+    try expectOutput("2 * 3 ** 2", "18");
     //TODO: one case per bitwise level against equality, mirroring LANGUAGE.md's table
+}
+
+test "right-associativity" {
+    try expectOutput("2 ** 3 ** 2", "512");
 }
 
 test "modulo" {

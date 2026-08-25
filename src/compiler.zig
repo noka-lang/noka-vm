@@ -22,6 +22,7 @@ const Precedence = enum(u8) {
     comparison,
     term,
     factor,
+    exponent,
     unary,
     call,
     primary,
@@ -120,7 +121,12 @@ pub const Compiler = struct {
         const op = self.previous.type;
         const rule = getRule(op);
 
-        self.parsePrecedence(@enumFromInt(@intFromEnum(rule.precedence) + 1));
+        const next: Precedence = if (op == .star_star)
+            rule.precedence
+        else
+            @enumFromInt(@intFromEnum(rule.precedence) + 1);
+
+        self.parsePrecedence(next);
 
         switch (op) {
             .bang_equal => self.emitOps(.equal, .not),
@@ -135,6 +141,7 @@ pub const Compiler = struct {
             .plus => self.emitOp(.add),
             .minus => self.emitOp(.subtract),
             .star => self.emitOp(.multiply),
+            .star_star => self.emitOp(.exponent),
             .slash => self.emitOp(.divide),
             .modulo => self.emitOp(.modulo),
             else => unreachable,
@@ -170,6 +177,7 @@ pub const Compiler = struct {
             .plus =>            .{ .prefix = null,      .infix = &binary,   .precedence = .term },
             .minus =>           .{ .prefix = &unary,    .infix = &binary,   .precedence = .term },
             .star =>            .{ .prefix = null,      .infix = &binary,   .precedence = .factor },
+            .star_star =>       .{ .prefix = null,      .infix = &binary,   .precedence = .exponent },
             .slash =>           .{ .prefix = null,      .infix = &binary,   .precedence = .factor },
             .modulo =>          .{ .prefix = null,      .infix = &binary,   .precedence = .factor },
             .bang =>            .{ .prefix = &unary,    .infix = null,      .precedence = .none },

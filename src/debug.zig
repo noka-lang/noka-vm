@@ -38,6 +38,7 @@ pub fn disassembleInstruction(chunk: *const Chunk, offset: usize) usize {
         .multiply => simpleInstruction("OP_MULTIPLY", offset),
         .divide => simpleInstruction("OP_DIVIDE", offset),
         .modulo => simpleInstruction("OP_MODULO", offset),
+        .exponent => simpleInstruction("OP_EXPONENT", offset),
         .not => simpleInstruction("OP_NOT", offset),
         .negate => simpleInstruction("OP_NEGATE", offset),
         .band => simpleInstruction("OP_BAND", offset),
