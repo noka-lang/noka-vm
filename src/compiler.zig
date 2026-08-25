@@ -15,6 +15,7 @@ const Precedence = enum(u8) {
     assignment,
     @"or",
     @"and",
+    fallback,
     bor,
     bxor,
     band,
@@ -25,6 +26,7 @@ const Precedence = enum(u8) {
     factor,
     exponent,
     unary,
+    optional,
     call,
     primary,
 };
@@ -121,7 +123,6 @@ pub const Compiler = struct {
     fn binary(self: *Compiler) void {
         const op = self.previous.type;
         const rule = getRule(op);
-
         const next: Precedence = if (op == .star_star)
             rule.precedence
         else
@@ -170,40 +171,55 @@ pub const Compiler = struct {
         self.patchJump(endJump);
     }
 
+    fn optional(self: *Compiler) void {
+        self.emitOp(.nil);
+        self.emitOps(.equal, .not);
+    }
+
+    fn fallback(self: *Compiler) void {
+        const endJump = self.emitJump(.jump_if_not_nil);
+
+        self.emitOp(.pop);
+        self.parsePrecedence(.bor);
+        self.patchJump(endJump);
+    }
+
     // TODO: add an entry for every new token type that can start or join an
     // expression.
     fn getRule(t: TokenType) ParseRule {
         return switch (t) {
             // zig fmt: off
-            .left_paren =>      .{ .prefix = &grouping, .infix = null,      .precedence = .none },
-            .right_paren =>     .{ .prefix = null,      .infix = null,      .precedence = .none },
-            .plus =>            .{ .prefix = null,      .infix = &binary,   .precedence = .term },
-            .minus =>           .{ .prefix = &unary,    .infix = &binary,   .precedence = .term },
-            .star =>            .{ .prefix = null,      .infix = &binary,   .precedence = .factor },
-            .star_star =>       .{ .prefix = null,      .infix = &binary,   .precedence = .exponent },
-            .slash =>           .{ .prefix = null,      .infix = &binary,   .precedence = .factor },
-            .modulo =>          .{ .prefix = null,      .infix = &binary,   .precedence = .factor },
-            .bang =>            .{ .prefix = &unary,    .infix = null,      .precedence = .none },
-            .bang_equal =>      .{ .prefix = null,      .infix = &binary,   .precedence = .equality },
-            .equal =>           .{ .prefix = null,      .infix = null,      .precedence = .none },
-            .equal_equal =>     .{ .prefix = null,      .infix = &binary,   .precedence = .equality },
-            .greater =>         .{ .prefix = null,      .infix = &binary,   .precedence = .comparison },
-            .greater_greater => .{ .prefix = null,      .infix = &binary,   .precedence = .shift },
-            .greater_equal =>   .{ .prefix = null,      .infix = &binary,   .precedence = .comparison },
-            .less =>            .{ .prefix = null,      .infix = &binary,   .precedence = .comparison },
-            .less_less =>       .{ .prefix = null,      .infix = &binary,   .precedence = .shift },
-            .less_equal =>      .{ .prefix = null,      .infix = &binary,   .precedence = .comparison },
-            .@"and" =>          .{ .prefix = null,      .infix = &@"and",   .precedence = .@"and" },
-            .band =>            .{ .prefix = null,      .infix = &binary,   .precedence = .band },
-            .bnot =>            .{ .prefix = &unary,    .infix = null,      .precedence = .none },
-            .bor =>             .{ .prefix = null,      .infix = &binary,   .precedence = .bor },
-            .bxor =>            .{ .prefix = null,      .infix = &binary,   .precedence = .bxor },
-            .not =>             .{ .prefix = &unary,    .infix = null,      .precedence = .none},
-            .@"or" =>           .{ .prefix = null,      .infix = &@"or",    .precedence = .@"or" },
-            .number =>          .{ .prefix = &number,   .infix = null,      .precedence = .none },
-            .true =>            .{ .prefix = &literal,  .infix = null,      .precedence = .none },
-            .false =>           .{ .prefix = &literal,  .infix = null,      .precedence = .none },
-            .nil =>             .{ .prefix = &literal,  .infix = null,      .precedence = .none },
+            .left_paren =>          .{ .prefix = &grouping, .infix = null,      .precedence = .none },
+            .right_paren =>         .{ .prefix = null,      .infix = null,      .precedence = .none },
+            .plus =>                .{ .prefix = null,      .infix = &binary,   .precedence = .term },
+            .minus =>               .{ .prefix = &unary,    .infix = &binary,   .precedence = .term },
+            .star =>                .{ .prefix = null,      .infix = &binary,   .precedence = .factor },
+            .star_star =>           .{ .prefix = null,      .infix = &binary,   .precedence = .exponent },
+            .slash =>               .{ .prefix = null,      .infix = &binary,   .precedence = .factor },
+            .modulo =>              .{ .prefix = null,      .infix = &binary,   .precedence = .factor },
+            .bang =>                .{ .prefix = &unary,    .infix = null,      .precedence = .none },
+            .bang_equal =>          .{ .prefix = null,      .infix = &binary,   .precedence = .equality },
+            .equal =>               .{ .prefix = null,      .infix = null,      .precedence = .none },
+            .equal_equal =>         .{ .prefix = null,      .infix = &binary,   .precedence = .equality },
+            .greater =>             .{ .prefix = null,      .infix = &binary,   .precedence = .comparison },
+            .greater_greater =>     .{ .prefix = null,      .infix = &binary,   .precedence = .shift },
+            .greater_equal =>       .{ .prefix = null,      .infix = &binary,   .precedence = .comparison },
+            .less =>                .{ .prefix = null,      .infix = &binary,   .precedence = .comparison },
+            .less_less =>           .{ .prefix = null,      .infix = &binary,   .precedence = .shift },
+            .less_equal =>          .{ .prefix = null,      .infix = &binary,   .precedence = .comparison },
+            .question =>            .{ .prefix = null,      .infix = &optional, .precedence = .optional },
+            .question_question =>   .{ .prefix = null,      .infix = &fallback, .precedence = .fallback },
+            .@"and" =>              .{ .prefix = null,      .infix = &@"and",   .precedence = .@"and" },
+            .band =>                .{ .prefix = null,      .infix = &binary,   .precedence = .band },
+            .bnot =>                .{ .prefix = &unary,    .infix = null,      .precedence = .none },
+            .bor =>                 .{ .prefix = null,      .infix = &binary,   .precedence = .bor },
+            .bxor =>                .{ .prefix = null,      .infix = &binary,   .precedence = .bxor },
+            .not =>                 .{ .prefix = &unary,    .infix = null,      .precedence = .none},
+            .@"or" =>               .{ .prefix = null,      .infix = &@"or",    .precedence = .@"or" },
+            .number =>              .{ .prefix = &number,   .infix = null,      .precedence = .none },
+            .true =>                .{ .prefix = &literal,  .infix = null,      .precedence = .none },
+            .false =>               .{ .prefix = &literal,  .infix = null,      .precedence = .none },
+            .nil =>                 .{ .prefix = &literal,  .infix = null,      .precedence = .none },
             // zig fmt: on
             else => .{},
         };

@@ -271,6 +271,10 @@ const VM = struct {
 
                     if (cond.boolean == false) self.ip += offset;
                 },
+                .jump_if_not_nil => {
+                    const offset = self.readShort();
+                    if (self.peek(0) != .nil) self.ip += offset;
+                },
                 .@"return" => {
                     // Temporary: print the result of the top-level expression.
                     // TODO: real `return` belongs to function calls; a
@@ -391,6 +395,7 @@ test "short-circuiting operators" {
     try expectFailure("true and (1 + true)", "runtime error: 'add' expected two numbers, got number and boolean.");
     try expectOutput("true or (1 + true)", "true");
     try expectFailure("false or (1 + true)", "runtime error: 'add' expected two numbers, got number and boolean.");
+    try expectOutput("3 ?? (1 + true)", "3");
 }
 
 test "arithmetic on non-numbers is a runtime error" {
@@ -412,8 +417,8 @@ test "precedence and grouping" {
     try expectOutput("8 / 4 / 2", "1");
     try expectOutput("2 < 3 == true", "true");
     try expectOutput("not true == false", "true");
-    try expectOutput("2 * 3 ** 2", "18");
     try expectOutput("1 << 2 + 1", "8");
+    try expectOutput("2 * 3 ** 2", "18");
     //TODO: one case per bitwise level against equality, mirroring LANGUAGE.md's table
 }
 

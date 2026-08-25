@@ -49,6 +49,7 @@ pub fn disassembleInstruction(chunk: *const Chunk, offset: usize) usize {
         .shift_right => simpleInstruction("OP_SHIFT_RIGHT", offset),
         .jump => jumpInstruction("OP_JUMP", 1, chunk, offset),
         .jump_if_false => jumpInstruction("OP_JUMP_IF_FALSE", 1, chunk, offset),
+        .jump_if_not_nil => jumpInstruction("OP_JUMP_IF_NOT_NIL", 1, chunk, offset),
         .print => simpleInstruction("OP_PRINT", offset),
         .@"return" => simpleInstruction("OP_RETURN", offset),
         else => blk: {

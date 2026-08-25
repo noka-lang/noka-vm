@@ -33,6 +33,7 @@ pub const OpCode = enum(u8) {
     // TODO: label
     jump,
     jump_if_false,
+    jump_if_not_nil,
     print,
     @"return",
     _,
