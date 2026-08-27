@@ -83,41 +83,20 @@ pub const Compiler = struct {
 
     // --- parse rules --------------------------------------------------------
 
-    fn number(self: *Compiler) void {
-        const v: Value = Value{ .number = std.fmt.parseFloat(f64, self.previous.lexeme) catch {
-            self.errorAtPreviousFmt("expected number, got '{s}'", .{self.previous.lexeme});
-            return;
-        } };
+    fn @"and"(self: *Compiler) void {
+        const endJump = self.emitJump(.jump_if_false);
 
-        self.emitConstant(v);
+        self.emitOp(.pop);
+        self.parsePrecedence(.@"and");
+        self.patchJump(endJump);
     }
 
-    fn grouping(self: *Compiler) void {
-        self.expression();
-        self.consume(.paren_right, "expected ')' after expression");
+    fn array(self: Compiler) void {
+        _ = self;
     }
 
-    fn literal(self: *Compiler) void {
-        switch (self.previous.type) {
-            .false => self.emitOp(OpCode.false),
-            .nil => self.emitOp(OpCode.nil),
-            .true => self.emitOp(OpCode.true),
-            else => unreachable,
-        }
-    }
-
-    fn unary(self: *Compiler) void {
-        const op = self.previous.type;
-
-        self.parsePrecedence(.unary);
-
-        switch (op) {
-            .bang => self.errorAtCurrent("'!' is not an operator, use 'not' for logical negation"),
-            .bnot => self.emitOp(.bnot),
-            .minus => self.emitOp(.negate),
-            .not => self.emitOp(.not),
-            else => unreachable,
-        }
+    fn assign(self: Compiler) void {
+        _ = self;
     }
 
     fn binary(self: *Compiler) void {
@@ -152,12 +131,87 @@ pub const Compiler = struct {
         }
     }
 
-    fn @"and"(self: *Compiler) void {
-        const endJump = self.emitJump(.jump_if_false);
+    fn blockExpr(self: Compiler) void {
+        _ = self;
+    }
+
+    fn call(self: Compiler) void {
+        _ = self;
+    }
+
+    fn caseExpr(self: Compiler) void {
+        _ = self;
+    }
+
+    fn dot(self: Compiler) void {
+        _ = self;
+    }
+
+    fn fallback(self: *Compiler) void {
+        const endJump = self.emitJump(.jump_if_not_nil);
 
         self.emitOp(.pop);
-        self.parsePrecedence(.@"and");
+        self.parsePrecedence(.bor);
         self.patchJump(endJump);
+    }
+
+    fn forExpr(self: Compiler) void {
+        _ = self;
+    }
+
+    fn function(self: Compiler) void {
+        _ = self;
+    }
+    fn grouping(self: *Compiler) void {
+        self.expression();
+        self.consume(.paren_right, "expected ')' after expression");
+    }
+
+    fn index(self: Compiler) void {
+        _ = self;
+    }
+
+    fn literal(self: *Compiler) void {
+        switch (self.previous.type) {
+            .false => self.emitOp(OpCode.false),
+            .nil => self.emitOp(OpCode.nil),
+            .true => self.emitOp(OpCode.true),
+            else => unreachable,
+        }
+    }
+
+    fn notIn(self: Compiler) void {
+        _ = self;
+    }
+
+    fn number(self: *Compiler) void {
+        const v: Value = Value{ .number = std.fmt.parseFloat(f64, self.previous.lexeme) catch {
+            self.errorAtPreviousFmt("expected number, got '{s}'", .{self.previous.lexeme});
+            return;
+        } };
+
+        self.emitConstant(v);
+    }
+
+    fn object(self: Compiler) void {
+        _ = self;
+    }
+
+    fn optional(self: *Compiler) void {
+        self.emitOp(.nil);
+        self.emitOps(.equal, .not);
+    }
+
+    fn optionalCall(self: Compiler) void {
+        _ = self;
+    }
+
+    fn optionalDot(self: Compiler) void {
+        _ = self;
+    }
+
+    fn optionalIndex(self: Compiler) void {
+        _ = self;
     }
 
     fn @"or"(self: *Compiler) void {
@@ -171,17 +225,38 @@ pub const Compiler = struct {
         self.patchJump(endJump);
     }
 
-    fn optional(self: *Compiler) void {
-        self.emitOp(.nil);
-        self.emitOps(.equal, .not);
+    fn pipe(self: Compiler) void {
+        _ = self;
     }
 
-    fn fallback(self: *Compiler) void {
-        const endJump = self.emitJump(.jump_if_not_nil);
+    fn string(self: Compiler) void {
+        _ = self;
+    }
 
-        self.emitOp(.pop);
-        self.parsePrecedence(.bor);
-        self.patchJump(endJump);
+    fn this(self: Compiler) void {
+        _ = self;
+    }
+
+    fn unary(self: *Compiler) void {
+        const op = self.previous.type;
+
+        self.parsePrecedence(.unary);
+
+        switch (op) {
+            .bang => self.errorAtCurrent("'!' is not an operator, use 'not' for logical negation"),
+            .bnot => self.emitOp(.bnot),
+            .minus => self.emitOp(.negate),
+            .not => self.emitOp(.not),
+            else => unreachable,
+        }
+    }
+
+    fn variable(self: Compiler) void {
+        _ = self;
+    }
+
+    fn whileExpr(self: Compiler) void {
+        _ = self;
     }
 
     // TODO: add an entry for every new token type that can start or join an
