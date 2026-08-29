@@ -12,23 +12,24 @@ const Value = @import("value.zig").Value;
 // TODO: Wire each of these up as operators are added.
 const Precedence = enum(u8) {
     none,
-    assignment,
-    @"or",
     @"and",
-    fallback,
+    assignment,
+    band,
     bor,
     bxor,
-    band,
-    equality,
+    call,
     comparison,
+    equality,
+    exponent,
+    factor,
+    fallback,
+    optional,
+    @"or",
+    pipe,
+    primary,
     shift,
     term,
-    factor,
-    exponent,
     unary,
-    optional,
-    call,
-    primary,
 };
 
 pub const Compiler = struct {
@@ -91,11 +92,11 @@ pub const Compiler = struct {
         self.patchJump(endJump);
     }
 
-    fn array(self: Compiler) void {
+    fn array(self: *Compiler) void {
         _ = self;
     }
 
-    fn assign(self: Compiler) void {
+    fn assign(self: *Compiler) void {
         _ = self;
     }
 
@@ -131,19 +132,19 @@ pub const Compiler = struct {
         }
     }
 
-    fn blockExpr(self: Compiler) void {
+    fn blockExpr(self: *Compiler) void {
         _ = self;
     }
 
-    fn call(self: Compiler) void {
+    fn call(self: *Compiler) void {
         _ = self;
     }
 
-    fn caseExpr(self: Compiler) void {
+    fn caseExpr(self: *Compiler) void {
         _ = self;
     }
 
-    fn dot(self: Compiler) void {
+    fn dot(self: *Compiler) void {
         _ = self;
     }
 
@@ -155,11 +156,11 @@ pub const Compiler = struct {
         self.patchJump(endJump);
     }
 
-    fn forExpr(self: Compiler) void {
+    fn forExpr(self: *Compiler) void {
         _ = self;
     }
 
-    fn function(self: Compiler) void {
+    fn function(self: *Compiler) void {
         _ = self;
     }
     fn grouping(self: *Compiler) void {
@@ -167,7 +168,7 @@ pub const Compiler = struct {
         self.consume(.paren_right, "expected ')' after expression");
     }
 
-    fn index(self: Compiler) void {
+    fn index(self: *Compiler) void {
         _ = self;
     }
 
@@ -180,7 +181,7 @@ pub const Compiler = struct {
         }
     }
 
-    fn notIn(self: Compiler) void {
+    fn notIn(self: *Compiler) void {
         _ = self;
     }
 
@@ -193,7 +194,7 @@ pub const Compiler = struct {
         self.emitConstant(v);
     }
 
-    fn object(self: Compiler) void {
+    fn object(self: *Compiler) void {
         _ = self;
     }
 
@@ -202,15 +203,15 @@ pub const Compiler = struct {
         self.emitOps(.equal, .not);
     }
 
-    fn optionalCall(self: Compiler) void {
+    fn optionalCall(self: *Compiler) void {
         _ = self;
     }
 
-    fn optionalDot(self: Compiler) void {
+    fn optionalDot(self: *Compiler) void {
         _ = self;
     }
 
-    fn optionalIndex(self: Compiler) void {
+    fn optionalIndex(self: *Compiler) void {
         _ = self;
     }
 
@@ -225,15 +226,15 @@ pub const Compiler = struct {
         self.patchJump(endJump);
     }
 
-    fn pipe(self: Compiler) void {
+    fn pipe(self: *Compiler) void {
         _ = self;
     }
 
-    fn string(self: Compiler) void {
+    fn string(self: *Compiler) void {
         _ = self;
     }
 
-    fn this(self: Compiler) void {
+    fn this(self: *Compiler) void {
         _ = self;
     }
 
@@ -251,11 +252,11 @@ pub const Compiler = struct {
         }
     }
 
-    fn variable(self: Compiler) void {
+    fn variable(self: *Compiler) void {
         _ = self;
     }
 
-    fn whileExpr(self: Compiler) void {
+    fn whileExpr(self: *Compiler) void {
         _ = self;
     }
 
