@@ -1,88 +1,104 @@
 const std = @import("std");
 
-// TODO: this is the most spec-heavy file. LANGUAGE.md's "Lexical Structure"
-// and "Lexical Grammar" sections define identifiers, keywords, string
-// literals, comments, and (the tricky one) *newline significance* (the stack
-// rule) and line continuation. Right now whitespace including newlines is just
-// skipped. Need to emit newline tokens where they matter and track line
+// TODO: need to emit newline tokens where they matter and track line
 // numbers for diagnostics.
 pub const TokenType = enum {
     // single-character tokens
-    plus,
-    minus,
-    star,
-    slash,
-    modulo,
-    // equal,
-    // colon,
-    // pound,
-    bang,
-    equal,
-    greater,
-    less,
-    left_paren,
-    right_paren,
-    // left_bracket,
-    // right_bracket,
-    // left_curly,
-    // right_curly,
-    // comma,
-    // dot,
-    question,
+    bang, // !
+    bracket_left, // [
+    bracket_right, // ]
+    colon, // :
+    comma, // ,
+    curly_left, // {
+    curly_right, // }
+    dot, // .
+    equal, // =
+    greater, // >
+    less, // <
+    minus, // -
+    modulo, // %
+    paren_left, // (
+    paren_right, // )
+    plus, // +
+    pound, // #
+    question, // ?
+    slash, // /
+    star, // *
+    underscore,
     // two-character tokens
-    equal_equal,
-    bang_equal,
-    greater_equal,
-    less_equal,
-    // plus_equal,
-    // minus_equal,
-    // star_equal,
-    // slash_equal,
-    // modulo_equal,
-    star_star,
-    greater_greater,
-    less_less,
-    question_question,
-    // case_arrow,
-    // pipe_arrow,
-    // optional_dot,
-    // optional_left_bracket,
-    // optional_left_brace,
-    // optional_colon,
+    bang_equal, // !=
+    case_arrow, // ->
+    equal_equal, // ==
+    greater_equal, // >=
+    greater_greater, // >>
+    less_equal, // <=
+    less_less, // <<
+    minus_equal, // -=
+    modulo_equal, // %=
+    pipe_arrow, // |>
+    plus_equal, // +=
+    question_bracket, // ?[
+    question_colon, // ?:
+    question_dot, // ?.
+    question_paren, // ?(
+    question_question, // ??
+    slash_equal, // /=
+    star_equal, // *=
+    star_star, // **
     // three-character tokens
-    // star_star_equal,
-    // greater_greater_equal,
-    // less_less_equal,
+    greater_greater_equal, // >>=
+    less_less_equal, // <<=
+    star_star_equal, // **=
     // keywords
     @"and",
-    @"or",
-    xor,
-    not,
     band,
-    bor,
     bnot,
+    bor,
     bxor,
-    // literals
-    number,
-    true,
+    case,
+    @"catch",
+    do,
+    draw,
+    end,
+    err,
     false,
+    @"fn",
+    @"for",
+    @"if",
+    in,
+    init,
+    next,
     nil,
+    not,
+    @"or",
+    ret,
+    stop,
+    this,
+    tick,
+    true,
+    @"while",
+    // literals
+    identifier,
+    number, // decimal, 0x/0X hex, 0b/0B binary
+    string, // optional prefixes f, m, fm, mf
     // bookkeeping
-    @"error",
+    comment,
     eof,
-    // TODO: identifiers, strings, keywords, comparison ops, newline, etc.
+    @"error",
+    newline,
 };
 
 pub const Token = struct {
     type: TokenType,
     lexeme: []const u8,
-    // TODO: add `line: u32` for error reporting.
+    line: u32,
 };
 
 pub const Scanner = struct {
     src: []const u8,
     start: usize = 0,
     current: usize = 0,
+    line: u32 = 0, // TODO: update this placeholder to reflect current line
 
     pub fn init(src: []const u8) Scanner {
         return .{ .src = src };
@@ -99,8 +115,8 @@ pub const Scanner = struct {
         if (isDigit(c)) return self.number();
 
         return switch (c) {
-            '(' => self.make(.left_paren),
-            ')' => self.make(.right_paren),
+            '(' => self.make(.paren_left),
+            ')' => self.make(.paren_right),
             '+' => self.make(.plus),
             '-' => self.make(.minus),
             '*' => self.make(if (self.match('*')) .star_star else .star),
@@ -158,7 +174,6 @@ pub const Scanner = struct {
             } else .@"error",
             'o' => self.checkKeyword(1, 1, "r", .@"or"),
             't' => self.checkKeyword(1, 3, "rue", .true),
-            'x' => self.checkKeyword(1, 2, "or", .xor),
             else => .@"error",
         };
     }
@@ -172,12 +187,19 @@ pub const Scanner = struct {
     }
 
     fn make(self: Scanner, t: TokenType) Token {
-        return .{ .type = t, .lexeme = self.src[self.start..self.current] };
+        return .{
+            .type = t,
+            .lexeme = self.src[self.start..self.current],
+            .line = self.line,
+        };
     }
 
     fn errorToken(self: Scanner, msg: []const u8) Token {
-        _ = self;
-        return .{ .type = .@"error", .lexeme = msg };
+        return .{
+            .type = .@"error",
+            .lexeme = msg,
+            .line = self.line,
+        };
     }
 
     fn advance(self: *Scanner) u8 {
