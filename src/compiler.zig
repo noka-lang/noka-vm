@@ -9,27 +9,28 @@ const Chunk = chunk_mod.Chunk;
 const OpCode = chunk_mod.OpCode;
 const Value = @import("value.zig").Value;
 
+// Ordered lowest to highest, matching LANGUAGE.md's precedence table.
 // TODO: Wire each of these up as operators are added.
 const Precedence = enum(u8) {
     none,
-    @"and",
     assignment,
-    band,
+    pipe,
+    @"or",
+    @"and",
+    fallback,
     bor,
     bxor,
-    call,
-    comparison,
+    band,
     equality,
-    exponent,
-    factor,
-    fallback,
-    optional,
-    @"or",
-    pipe,
-    primary,
+    comparison,
     shift,
     term,
+    factor,
+    exponent,
     unary,
+    optional,
+    call,
+    primary,
 };
 
 pub const Compiler = struct {
