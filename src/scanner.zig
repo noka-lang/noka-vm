@@ -3,89 +3,27 @@ const std = @import("std");
 // TODO: need to emit newline tokens where they matter and track line
 // numbers for diagnostics.
 pub const TokenType = enum {
+    // zig fmt: off
     // single-character tokens
-    bang, // !
-    bracket_left, // [
-    bracket_right, // ]
-    colon, // :
-    comma, // ,
-    curly_left, // {
-    curly_right, // }
-    dot, // .
-    equal, // =
-    greater, // >
-    less, // <
-    minus, // -
-    modulo, // %
-    paren_left, // (
-    paren_right, // )
-    plus, // +
-    pound, // #
-    question, // ?
-    slash, // /
-    star, // *
-    underscore,
+    bang, bracket_left, bracket_right, colon, comma, curly_left, curly_right,
+    dot, equal, greater, less, minus, modulo, paren_left, paren_right, plus,
+    pound, question, slash, star, underscore,
     // two-character tokens
-    bang_equal, // !=
-    case_arrow, // ->
-    equal_equal, // ==
-    greater_equal, // >=
-    greater_greater, // >>
-    less_equal, // <=
-    less_less, // <<
-    minus_equal, // -=
-    modulo_equal, // %=
-    pipe_arrow, // |>
-    plus_equal, // +=
-    question_bracket, // ?[
-    question_colon, // ?:
-    question_dot, // ?.
-    question_paren, // ?(
-    question_question, // ??
-    slash_equal, // /=
-    star_equal, // *=
-    star_star, // **
+    bang_equal, case_arrow, equal_equal, greater_equal, greater_greater,
+    less_equal, less_less, minus_equal, minus_minus, modulo_equal, pipe_arrow,
+    plus_equal, plus_plus, question_bracket, question_colon, question_dot,
+    question_paren, question_question, slash_equal, star_equal, star_star,
     // three-character tokens
-    greater_greater_equal, // >>=
-    less_less_equal, // <<=
-    star_star_equal, // **=
+    greater_greater_equal, less_less_equal, star_star_equal,
     // keywords
-    @"and",
-    band,
-    bnot,
-    bor,
-    bxor,
-    case,
-    @"catch",
-    do,
-    draw,
-    end,
-    err,
-    false,
-    @"fn",
-    @"for",
-    @"if",
-    in,
-    init,
-    next,
-    nil,
-    not,
-    @"or",
-    ret,
-    stop,
-    this,
-    tick,
-    true,
-    @"while",
+    @"and", band, bnot, bor, bxor, case, @"catch", do, draw, end, err, false,
+    @"fn", @"for", @"if", in, init, next, nil, not, @"or", ret, stop, this,
+    tick, true, @"while",
     // literals
-    identifier,
-    number, // decimal, 0x/0X hex, 0b/0B binary
-    string, // optional prefixes f, m, fm, mf
+    identifier, number, string,
     // bookkeeping
-    comment,
-    eof,
-    @"error",
-    newline,
+    comment, eof, @"error", newline,
+    // zig fmt: on
 };
 
 pub const Token = struct {
