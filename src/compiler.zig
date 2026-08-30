@@ -52,7 +52,8 @@ pub const Compiler = struct {
     pub fn compile(source: []const u8, chunk: *Chunk) bool {
         var parser = Compiler{ .scanner = Scanner.init(source), .chunk = chunk };
         parser.advance();
-        parser.expression();
+
+        if (parser.current.type != .eof) parser.expression();
         parser.consume(.eof, "expected end of expression");
         parser.emitOp(.@"return");
 

@@ -280,8 +280,10 @@ const VM = struct {
                     // TODO: real `return` belongs to function calls; a
                     // top-level program should print via an explicit print
                     // statement/op instead of leaning on OP_RETURN.
-                    printValue(self.pop());
-                    io.print("\n");
+                    if (self.sp > 0) {
+                        printValue(self.pop());
+                        io.print("\n");
+                    }
                     return true;
                 },
                 else => {
