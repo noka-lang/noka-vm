@@ -22,6 +22,7 @@ pub const OpCode = enum(u8) {
     modulo,
     exponent,
     not,
+    in,
     negate,
     // binary operators
     band,

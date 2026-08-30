@@ -54,6 +54,7 @@ pub const Compiler = struct {
         parser.advance();
 
         if (parser.current.type != .eof) parser.expression();
+
         parser.consume(.eof, "expected end of expression");
         parser.emitOp(.@"return");
 
@@ -146,6 +147,10 @@ pub const Compiler = struct {
         _ = self;
     }
 
+    fn decrement(self: *Compiler) void {
+        _ = self;
+    }
+
     fn dot(self: *Compiler) void {
         _ = self;
     }
@@ -170,6 +175,10 @@ pub const Compiler = struct {
         self.consume(.paren_right, "expected ')' after expression");
     }
 
+    fn increment(self: *Compiler) void {
+        _ = self;
+    }
+
     fn index(self: *Compiler) void {
         _ = self;
     }
@@ -184,7 +193,9 @@ pub const Compiler = struct {
     }
 
     fn notIn(self: *Compiler) void {
-        _ = self;
+        self.consume(.in, "expected 'in' after 'not'.");
+        self.parsePrecedence(.shift);
+        self.emitOps(.in, .not);
     }
 
     fn number(self: *Compiler) void {
@@ -296,6 +307,7 @@ pub const Compiler = struct {
             .less_less_equal =>         .{ .prefix = null,          .infix = &assign,           .precedence = .assignment },
             .minus =>                   .{ .prefix = &unary,        .infix = &binary,           .precedence = .term },
             .minus_equal =>             .{ .prefix = null,          .infix = &assign,           .precedence = .assignment },
+            .minus_minus =>             .{ .prefix = null,          .infix = &decrement,        .precedence = .assignment },
             .modulo =>                  .{ .prefix = null,          .infix = &binary,           .precedence = .factor },
             .modulo_equal =>            .{ .prefix = null,          .infix = &assign,           .precedence = .assignment },
             .nil =>                     .{ .prefix = &literal,      .infix = null,              .precedence = .none },
@@ -306,6 +318,7 @@ pub const Compiler = struct {
             .pipe_arrow =>              .{ .prefix = null,          .infix = &pipe,             .precedence = .pipe },
             .plus =>                    .{ .prefix = null,          .infix = &binary,           .precedence = .term },
             .plus_equal =>              .{ .prefix = null,          .infix = &assign,           .precedence = .assignment },
+            .plus_plus =>               .{ .prefix = null,          .infix = &increment,        .precedence = .assignment },
             .question =>                .{ .prefix = null,          .infix = &optional,         .precedence = .optional },
             .question_bracket =>        .{ .prefix = null,          .infix = &optionalIndex,    .precedence = .call },
             .question_dot =>            .{ .prefix = null,          .infix = &optionalDot,      .precedence = .call },
