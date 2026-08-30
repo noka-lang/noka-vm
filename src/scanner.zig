@@ -94,24 +94,63 @@ pub const Scanner = struct {
     }
 
     fn identifierType(self: Scanner) TokenType {
-        // TODO: all the rest of the keywords
+        // TODO: on mismatch return .identifier instead of .error
         return switch (self.src[self.start]) {
             'a' => self.checkKeyword(1, 2, "nd", .@"and"),
-            'b' => if (self.current - self.start > 1) switch (self.src[self.start + 1]) {
+            'b' => if (self.current - self.start > 2) switch (self.src[self.start + 1]) {
                 'a' => self.checkKeyword(2, 2, "nd", .band),
                 'n' => self.checkKeyword(2, 2, "ot", .bnot),
                 'o' => self.checkKeyword(2, 1, "r", .bor),
                 'x' => self.checkKeyword(2, 2, "or", .bxor),
                 else => .@"error",
             } else .@"error",
-            'f' => self.checkKeyword(1, 4, "alse", .false),
-            'n' => if (self.current - self.start > 1) switch (self.src[self.start + 1]) {
+            'c' => if (self.current - self.start > 3) switch (self.src[self.start + 1]) {
+                'a' => switch (self.src[self.start + 2]) {
+                    's' => self.checkKeyword(3, 1, "e", .case),
+                    't' => self.checkKeyword(3, 2, "ch", .@"catch"),
+                    else => .@"error",
+                },
+                else => .@"error",
+            } else .@"error",
+            'd' => if (self.current - self.start > 1) switch (self.src[self.start + 1]) {
+                'r' => self.checkKeyword(2, 2, "aw", .draw),
+                else => self.checkKeyword(1, 1, "o", .do),
+            } else .@"error",
+            'e' => if (self.current - self.start > 2) switch (self.src[self.start + 1]) {
+                'n' => self.checkKeyword(2, 1, "d", .end),
+                'r' => self.checkKeyword(2, 1, "r", .err),
+                else => .@"error",
+            } else .@"error",
+            'f' => if (self.current - self.start > 1) switch (self.src[self.start + 1]) {
+                'a' => self.checkKeyword(2, 3, "lse", .false),
+                'n' => self.checkKeyword(1, 1, "n", .@"fn"),
+                'o' => self.checkKeyword(2, 1, "r", .@"for"),
+                else => .@"error",
+            } else .@"error",
+            'i' => if (self.current - self.start > 1) switch (self.src[self.start + 1]) {
+                'f' => self.checkKeyword(1, 1, "f", .@"if"),
+                'n' => if (self.current - self.start > 2) switch (self.src[self.start + 2]) {
+                    'i' => self.checkKeyword(3, 1, "t", .init),
+                    else => .@"error",
+                } else self.checkKeyword(1, 1, "n", .in),
+                else => .@"error",
+            } else .@"error",
+            'n' => if (self.current - self.start > 2) switch (self.src[self.start + 1]) {
+                'e' => self.checkKeyword(2, 2, "xt", .next),
                 'i' => self.checkKeyword(2, 1, "l", .nil),
                 'o' => self.checkKeyword(2, 1, "t", .not),
                 else => .@"error",
             } else .@"error",
             'o' => self.checkKeyword(1, 1, "r", .@"or"),
-            't' => self.checkKeyword(1, 3, "rue", .true),
+            'r' => self.checkKeyword(1, 2, "et", .ret),
+            's' => self.checkKeyword(1, 3, "top", .stop),
+            't' => if (self.current - self.start > 3) switch (self.src[self.start + 1]) {
+                'h' => self.checkKeyword(2, 2, "is", .this),
+                'i' => self.checkKeyword(2, 2, "ck", .tick),
+                'r' => self.checkKeyword(2, 2, "ue", .true),
+                else => .@"error",
+            } else .@"error",
+            'w' => self.checkKeyword(1, 4, "hile", .@"while"),
             else => .@"error",
         };
     }
