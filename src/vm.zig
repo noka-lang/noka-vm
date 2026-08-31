@@ -5,8 +5,6 @@ const OpCode = @import("chunk.zig").OpCode;
 const Compiler = @import("compiler.zig").Compiler;
 const debug = @import("debug.zig");
 const Value = @import("value.zig").Value;
-const valuesEqual = @import("value.zig").valuesEqual;
-const printValue = @import("value.zig").printValue;
 const disc_mod = @import("disc.zig");
 
 const debug_print_bytecode = false;
@@ -166,7 +164,7 @@ const VM = struct {
                 .equal => {
                     const b = self.pop();
                     const a = self.pop();
-                    self.push(.{ .boolean = valuesEqual(a, b) });
+                    self.push(.{ .boolean = a.equals(b) });
                 },
                 .greater, .less => {
                     const b = self.pop();
@@ -281,7 +279,7 @@ const VM = struct {
                     // top-level program should print via an explicit print
                     // statement/op instead of leaning on OP_RETURN.
                     if (self.sp > 0) {
-                        printValue(self.pop());
+                        self.pop().print();
                         io.print("\n");
                     }
                     return true;

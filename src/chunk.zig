@@ -70,7 +70,7 @@ pub const Chunk = struct {
         // NOTE: this loop is definitely not efficient but should be fine for now.
         // If it starts to get out of hand replace it with a hash map.
         for (self.constants[0..self.const_count], 0..) |existing, i| {
-            if (sameConstant(existing, value)) return @intCast(i);
+            if (existing.equals(value)) return @intCast(i);
         }
 
         if (self.const_count >= const_max) {
@@ -82,13 +82,4 @@ pub const Chunk = struct {
         return @intCast(self.const_count);
     }
 
-    fn sameConstant(a: Value, b: Value) bool {
-        if (std.meta.activeTag(a) != std.meta.activeTag(b)) return false;
-
-        return switch (a) {
-            .nil => true,
-            .boolean => a.boolean == b.boolean,
-            .number => @as(u64, @bitCast(a.number)) == @as(u64, @bitCast(b.number)),
-        };
-    }
 };

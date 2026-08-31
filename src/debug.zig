@@ -74,7 +74,7 @@ fn simpleInstruction(name: []const u8, offset: usize) usize {
 fn constantInstruction(name: []const u8, chunk: *const Chunk, offset: usize) usize {
     const index = (@as(u16, chunk.code[offset + 1]) << 8) | chunk.code[offset + 2];
     io.printf("{s} {d} '", .{ name, index });
-    value_mod.printValue(chunk.constants[index]);
+    chunk.constants[index].print();
     io.print("'\n");
     return offset + 3;
 }
