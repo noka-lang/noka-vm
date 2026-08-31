@@ -348,7 +348,7 @@ pub const Compiler = struct {
         while (true) {
             self.current = self.scanner.next();
             if (self.current.type != .@"error") break;
-            self.errorAtCurrent("unexpected character");
+            self.errorAtCurrent(self.current.message orelse "unexpected character");
         }
     }
 

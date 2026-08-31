@@ -30,6 +30,7 @@ pub const Token = struct {
     type: TokenType,
     lexeme: []const u8,
     line: u32,
+    message: ?[]const u8 = null,
 };
 
 pub const Scanner = struct {
@@ -176,6 +177,15 @@ pub const Scanner = struct {
             .type = .@"error",
             .lexeme = msg,
             .line = self.line,
+        };
+    }
+
+    fn errorTokenMsg(self: Scanner, msg: []const u8) Token {
+        return .{
+            .type = .@"error",
+            .lexeme = self.src[self.start..self.current],
+            .line = self.line,
+            .message = msg,
         };
     }
 
