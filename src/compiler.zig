@@ -123,6 +123,7 @@ pub const Compiler = struct {
             .greater => self.emitOp(.greater),
             .greater_equal => self.emitOps(.less, .not),
             .greater_greater => self.emitOp(.shift_right),
+            .in => self.emitOp(.in),
             .less => self.emitOp(.less),
             .less_equal => self.emitOps(.greater, .not),
             .less_less => self.emitOp(.shift_left),

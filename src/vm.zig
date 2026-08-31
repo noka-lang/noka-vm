@@ -271,6 +271,17 @@ const VM = struct {
 
                     self.push(.{ .boolean = !v.boolean });
                 },
+                .in => {
+                    const haystack = self.pop();
+                    const needle = self.pop();
+
+                    // TODO: arrays and objects
+                    if (needle != .string or haystack != .string) {
+                        return self.runtimeError("'in' expected two strings, got {s} and {s}.", .{ needle.typeName(), haystack.typeName() });
+                    }
+
+                    self.push(.{ .boolean = std.mem.indexOf(u8, haystack.string.bytes, needle.string.bytes) != null });
+                },
                 .bnot => {
                     const v = self.pop();
 
@@ -498,6 +509,13 @@ test "string equality" {
     try expectOutput("\"ab\" == \"a\" + \"b\"", "true");
     try expectOutput("\"a\" == 1", "false");
     try expectOutput("\"\" == nil", "false");
+}
+
+test "string 'in' operator" {
+    try expectOutput("\"ok\" in \"it is ok\"", "true");
+    try expectOutput("\"no\" in \"it is ok\"", "false");
+    try expectOutput("\"ok\" not in \"it is ok\"", "false");
+    try expectFailure("1 in \"abc\"", "runtime error: 'in' expected two strings, got number and string.");
 }
 
 test "unterminated/unsupported strings" {

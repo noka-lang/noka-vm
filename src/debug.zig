@@ -26,6 +26,7 @@ pub fn disassembleInstruction(chunk: *const Chunk, offset: usize) usize {
     const op: OpCode = @enumFromInt(chunk.code[offset]);
     return switch (op) {
         .constant => constantInstruction("OP_CONSTANT", chunk, offset),
+        .in => return, // TODO
         .nil => simpleInstruction("OP_NIL", offset),
         .true => simpleInstruction("OP_TRUE", offset),
         .false => simpleInstruction("OP_FALSE", offset),
