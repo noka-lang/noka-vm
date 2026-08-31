@@ -6,6 +6,7 @@ const Compiler = @import("compiler.zig").Compiler;
 const debug = @import("debug.zig");
 const Value = @import("value.zig").Value;
 const disc_mod = @import("disc.zig");
+const strings = @import("strings.zig");
 
 const debug_print_bytecode = false;
 const debug_trace_execution = false;
@@ -24,8 +25,9 @@ export fn disc_cap() usize {
 
 export fn init() void {
     fba.reset();
-    //TODO: once the VM holds globals / interned strings / a heap, reset
-    // them here too so each run (or REPL line) starts clean.
+    strings.reset();
+    //TODO: once the VM holds globals, reset them here too so each run (or REPL
+    // line) starts clean.
 }
 
 var chunk: Chunk = undefined;
@@ -180,7 +182,30 @@ const VM = struct {
                         else => unreachable,
                     } });
                 },
-                .add, .subtract, .multiply, .divide, .modulo, .exponent => {
+                .add => {
+                    const b = self.pop();
+                    const a = self.pop();
+
+                    if (a == .string and b == .string) {
+                        var builder = strings.build();
+                        builder.pushSlice(a.string.bytes);
+                        builder.pushSlice(b.string.bytes);
+
+                        const joined = builder.finish() orelse {
+                            return self.runtimeError("out of string memory.", .{});
+                        };
+
+                        self.push(.{ .string = joined });
+                        continue;
+                    }
+
+                    if (a != .number or b != .number) {
+                        return self.runtimeError("'add' expected two numbers or strings, got {s} and {s}.", .{ a.typeName(), b.typeName() });
+                    }
+
+                    self.push(.{ .number = a.number + b.number });
+                },
+                .subtract, .multiply, .divide, .modulo, .exponent => {
                     const b = self.pop();
                     const a = self.pop();
 
@@ -392,14 +417,14 @@ test "bitwise logical operators" {
 
 test "short-circuiting operators" {
     try expectOutput("false and (1 + true)", "false");
-    try expectFailure("true and (1 + true)", "runtime error: 'add' expected two numbers, got number and boolean.");
+    try expectFailure("true and (1 + true)", "runtime error: 'add' expected two numbers or strings, got number and boolean.");
     try expectOutput("true or (1 + true)", "true");
-    try expectFailure("false or (1 + true)", "runtime error: 'add' expected two numbers, got number and boolean.");
+    try expectFailure("false or (1 + true)", "runtime error: 'add' expected two numbers or strings, got number and boolean.");
     try expectOutput("3 ?? (1 + true)", "3");
 }
 
 test "arithmetic on non-numbers is a runtime error" {
-    try expectFailure("1 + true", "runtime error: 'add' expected two numbers, got number and boolean.");
+    try expectFailure("1 + true", "runtime error: 'add' expected two numbers or strings, got number and boolean.");
     try expectFailure("nil - false", "runtime error: 'subtract' expected two numbers, got nil and boolean.");
     try expectFailure("3 * true", "runtime error: 'multiply' expected two numbers, got number and boolean.");
     try expectFailure("false / 4", "runtime error: 'divide' expected two numbers, got boolean and number.");
@@ -440,6 +465,46 @@ test "unary minus" {
     try expectOutput("-5", "-5");
     try expectOutput("--5", "5");
     try expectOutput("-2 * 3", "-6");
+}
+
+test "strings" {
+    try expectOutput("\"hello\"", "hello");
+    try expectOutput("'hello'", "hello");
+    try expectOutput("\"\"", "");
+    try expectOutput("'Noka says \"hi\"'", "Noka says \"hi\"");
+    try expectOutput("\"it's fine\"", "it's fine");
+}
+
+test "string escapes" {
+    try expectOutput("\"a\\tb\"", "a\tb");
+    try expectOutput("\"a\\nb\"", "a\nb");
+    try expectOutput("\"a\\\\b\"", "a\\b");
+    try expectOutput("\"a\\\"b\"", "a\"b");
+    try expectOutput("'a\\'b'", "a'b");
+    try expectFailure("\"a\\qb\"", "compile error at '\"a\\qb\"': unknown escape '\\q'.");
+}
+
+test "string concatenation" {
+    try expectOutput("\"foo\" + \"bar\"", "foobar");
+    try expectOutput("\"a\" + \"b\" + \"c\"", "abc");
+    try expectFailure("\"score: \" + 10", "runtime error: 'add' expected two numbers or strings, got string and number.");
+    try expectFailure("\"a\" - \"b\"", "runtime error: 'subtract' expected two numbers, got string and string.");
+}
+
+test "string equality" {
+    try expectOutput("\"a\" == \"a\"", "true");
+    try expectOutput("\"a\" == \"b\"", "false");
+    try expectOutput("\"a\" != \"b\"", "true");
+    try expectOutput("\"ab\" == \"a\" + \"b\"", "true");
+    try expectOutput("\"a\" == 1", "false");
+    try expectOutput("\"\" == nil", "false");
+}
+
+test "unterminated/unsupported strings" {
+    try expectFailure("\"abc", "compile error at '\"abc': unterminated string.");
+    try expectFailure("\"abc\nx\"", "compile error at '\"abc': unterminated string.");
+    try expectFailure("f\"hi\"", "compile error at 'f': string prefixes are not supported (yet).");
+    try expectFailure("m'hi'", "compile error at 'm': string prefixes are not supported (yet).");
 }
 
 test "compile errors are reported, not executed" {

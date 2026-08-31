@@ -66,8 +66,23 @@ pub const Scanner = struct {
             '=' => self.make(if (self.match('=')) .equal_equal else .equal),
             '>' => self.make(if (self.match('=')) .greater_equal else if (self.match('>')) .greater_greater else .greater),
             '<' => self.make(if (self.match('=')) .less_equal else if (self.match('<')) .less_less else .less),
+            '"', '\'' => self.string(c),
             else => self.errorToken(self.src[self.start..self.current]),
         };
+    }
+
+    fn string(self: *Scanner, quote: u8) Token {
+        while (true) {
+            // TODO: `m` strings may span multiple lines
+            // TODO: `f` strings cannot span multiple lines
+            if (self.isAtEnd() or self.peek() == '\n') {
+                return self.errorTokenMsg("unterminated string");
+            }
+
+            const c = self.advance();
+            if (c == quote) return self.make(.string);
+            if (c == '\\' and !self.isAtEnd() and self.peek() != '\n') _ = self.advance();
+        }
     }
 
     fn number(self: *Scanner) Token {
@@ -91,7 +106,22 @@ pub const Scanner = struct {
     fn identifier(self: *Scanner) Token {
         while (isAlpha(self.peek()) or isDigit(self.peek())) _ = self.advance();
 
+        // TODO: `f` and `m` string prefixes
+        if (self.peek() == '"' or self.peek() == '\'') {
+            if (isStringPrefix(self.src[self.start..self.current])) {
+                return self.errorTokenMsg("string prefixes are not supported (yet)");
+            }
+        }
+
         return self.make(self.identifierType());
+    }
+
+    fn isStringPrefix(lexeme: []const u8) bool {
+        for ([_][]const u8{ "f", "m", "fm", "mf" }) |prefix| {
+            if (std.mem.eql(u8, lexeme, prefix)) return true;
+        }
+
+        return false;
     }
 
     fn identifierType(self: Scanner) TokenType {

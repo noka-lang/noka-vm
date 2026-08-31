@@ -8,6 +8,7 @@ const chunk_mod = @import("chunk.zig");
 const Chunk = chunk_mod.Chunk;
 const OpCode = chunk_mod.OpCode;
 const Value = @import("value.zig").Value;
+const strings = @import("strings.zig");
 
 // Ordered lowest to highest, matching LANGUAGE.md's precedence table.
 // TODO: Wire each of these up as operators are added.
@@ -114,23 +115,23 @@ pub const Compiler = struct {
         self.parsePrecedence(next);
 
         switch (op) {
-            .bang_equal => self.emitOps(.equal, .not),
             .band => self.emitOp(.band),
+            .bang_equal => self.emitOps(.equal, .not),
             .bor => self.emitOp(.bor),
             .bxor => self.emitOp(.bxor),
             .equal_equal => self.emitOp(.equal),
             .greater => self.emitOp(.greater),
-            .greater_greater => self.emitOp(.shift_right),
             .greater_equal => self.emitOps(.less, .not),
+            .greater_greater => self.emitOp(.shift_right),
             .less => self.emitOp(.less),
-            .less_less => self.emitOp(.shift_left),
             .less_equal => self.emitOps(.greater, .not),
-            .plus => self.emitOp(.add),
+            .less_less => self.emitOp(.shift_left),
             .minus => self.emitOp(.subtract),
+            .modulo => self.emitOp(.modulo),
+            .plus => self.emitOp(.add),
+            .slash => self.emitOp(.divide),
             .star => self.emitOp(.multiply),
             .star_star => self.emitOp(.exponent),
-            .slash => self.emitOp(.divide),
-            .modulo => self.emitOp(.modulo),
             else => unreachable,
         }
     }
@@ -244,7 +245,39 @@ pub const Compiler = struct {
     }
 
     fn string(self: *Compiler) void {
-        _ = self;
+        const body = self.previous.lexeme[1 .. self.previous.lexeme.len - 1];
+
+        var builder = strings.build();
+        var i: usize = 0;
+        while (i < body.len) : (i += 1) {
+            if (body[i] != '\\') {
+                builder.push(body[i]);
+                continue;
+            }
+
+            // scanner cannot end on a literal backslash
+            i += 1;
+            builder.push(switch (body[i]) {
+                'n' => '\n',
+                't' => '\t',
+                '\\' => '\\',
+                '"' => '"',
+                '\'' => '\'',
+                // TODO: '{' and '}'
+                else => {
+                    builder.discard();
+                    self.errorAtPreviousFmt("unknown escape '\\{c}'", .{body[i]});
+                    return;
+                },
+            });
+        }
+
+        const s = builder.finish() orelse {
+            self.errorAtPrevious("out of string memory");
+            return;
+        };
+
+        self.emitConstant(.{ .string = s });
     }
 
     fn this(self: *Compiler) void {

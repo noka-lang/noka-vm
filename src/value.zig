@@ -1,18 +1,21 @@
 const std = @import("std");
 const io = @import("io.zig");
+const String = @import("strings.zig").String;
 
 pub const Value = union(enum) {
     boolean: bool,
     nil,
     number: f64,
-    // TODO: string, array, object, function, error
+    string: *const String,
+    // TODO: array, object, function, error
 
     pub fn typeName(self: Value) []const u8 {
         return switch (self) {
             .boolean => "boolean",
             .nil => "nil",
             .number => "number",
-            // TODO: string, array, object, function, error
+            .string => "string",
+            // TODO: array, object, function, error
         };
     }
 
@@ -23,7 +26,8 @@ pub const Value = union(enum) {
             .boolean => self.boolean == b.boolean,
             .nil => true,
             .number => self.number == b.number,
-            // TODO: string, array, object, function, error
+            .string => self.string == b.string,
+            // TODO: array, object, function, error
         };
     }
 
@@ -32,7 +36,8 @@ pub const Value = union(enum) {
             .boolean => |b| io.printf("{}", .{b}),
             .nil => io.printf("nil", .{}),
             .number => |n| io.printf("{d}", .{n}),
-            // TODO: string, array, object, function, error
+            .string => |s| io.print(s.bytes),
+            // TODO: array, object, function, error
         }
     }
 };
