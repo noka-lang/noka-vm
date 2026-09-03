@@ -37,7 +37,8 @@ pub const Scanner = struct {
     src: []const u8,
     start: usize = 0,
     current: usize = 0,
-    line: u32 = 0, // TODO: update this placeholder to reflect current line
+    line: u32 = 1,
+    emitted_token: bool = false,
 
     pub fn init(src: []const u8) Scanner {
         return .{ .src = src };
@@ -47,7 +48,23 @@ pub const Scanner = struct {
         self.skipWhitespace();
         self.start = self.current;
 
+        if (self.peek() == '\n') {
+            while (true) {
+                _ = self.advance();
+                self.line += 1;
+
+                self.skipWhitespace();
+                if (self.peek() != '\n') break;
+            }
+
+            if (!self.emitted_token or self.isAtEnd()) return self.next();
+
+            return .{ .type = .newline, .lexeme = "\\n", .line = self.line };
+        }
+
         if (self.isAtEnd()) return self.make(.eof);
+
+        self.emitted_token = true;
 
         const c = self.advance();
         if (isAlpha(c)) return self.identifier();
@@ -93,11 +110,10 @@ pub const Scanner = struct {
     }
 
     fn skipWhitespace(self: *Scanner) void {
-        // TODO: newlines are significant in NokaScript, so don't just eat
-        // them. Also handle comments here (see spec "Comments").
+        // TODO: handle comments here (see spec "Comments").
         while (true) {
             switch (self.peek()) {
-                ' ', '\t', '\r', '\n' => _ = self.advance(),
+                ' ', '\t', '\r' => _ = self.advance(),
                 else => return,
             }
         }

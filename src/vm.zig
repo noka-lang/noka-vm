@@ -525,6 +525,17 @@ test "unterminated/unsupported strings" {
     try expectFailure("m'hi'", "compile error at 'm': string prefixes are not supported (yet).");
 }
 
+test "newlines around a lone expression are dropped" {
+    try expectOutput("1 + 2\n", "3");
+    try expectOutput("\n\n1 + 2", "3");
+    try expectOutput("\n  \n1 + 2\n  \n\n", "3");
+}
+
+test "newline between expressions separates" {
+    try expectFailure("1\n2", "compile error at '\\n': expected end of expression.");
+    try expectFailure("1\n  \n2", "compile error at '\\n': expected end of expression.");
+}
+
 test "compile errors are reported, not executed" {
     try expectFailure("(1 + 2", "compile error at end: expected ')' after expression.");
     try expectFailure("1 +", "compile error at end: expected expression.");
