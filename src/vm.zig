@@ -93,7 +93,7 @@ fn compileAndRun(source: []const u8) i32 {
     return if (vm.run()) 0 else 1;
 }
 
-// --- VM ---------------------------------------------------------------------
+// ---- VM ----------------------------------------------------------------------------------------
 
 const stack_max = 256;
 
@@ -311,9 +311,8 @@ const VM = struct {
                 },
                 .@"return" => {
                     // Temporary: print the result of the top-level expression.
-                    // TODO: real `return` belongs to function calls; a
-                    // top-level program should print via an explicit print
-                    // statement/op instead of leaning on OP_RETURN.
+                    // TODO: real `return` belongs to function calls; a top-level program should
+                    // print via an explicit print statement/op instead of leaning on OP_RETURN.
                     if (self.sp > 0) {
                         self.pop().print();
                         io.print("\n");
@@ -337,7 +336,7 @@ const VM = struct {
     }
 };
 
-// --- TESTS ------------------------------------------------------------------
+// ---- TESTS -------------------------------------------------------------------------------------
 
 const testing = @import("std").testing;
 

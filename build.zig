@@ -11,7 +11,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // --- NOT A SHIPPED ARTIFACT ---------------------------------------------
+    // ---- NOT A SHIPPED ARTIFACT ----------------------------------------------------------------
     // It exists so `zig build run -- '1 + 2'` can drive the VM from a terminal
     const exe = b.addExecutable(.{
         .name = "noka",
@@ -31,10 +31,10 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Evaluate a program natively: zig build run -- '1 + 2'");
     run_step.dependOn(&run_cmd.step);
 
-    // --- zig build forge ----------------------------------------------------
+    // ---- zig build forge -----------------------------------------------------------------------
     // TODO: add a `zig build forge` step wrapping `forgeDisc` to generate test discs from the terminal
 
-    // --- zig build test -----------------------------------------------------
+    // ---- zig build test ------------------------------------------------------------------------
     const vm_tests = b.addTest(.{ .root_module = vm });
     const exe_tests = b.addTest(.{ .root_module = exe.root_module });
 
@@ -42,7 +42,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(vm_tests).step);
     test_step.dependOn(&b.addRunArtifact(exe_tests).step);
 
-    // --- zig build wasm: ship this artifact! ------------------------------
+    // ---- zig build wasm: ship this artifact! ---------------------------------------------------
     const wasm = b.addExecutable(.{
         .name = "vm",
         .root_module = b.createModule(.{
@@ -64,7 +64,7 @@ pub fn build(b: *std.Build) void {
     const wasm_step = b.step("wasm", "Build the release artifact at zig-out/vm.wasm");
     wasm_step.dependOn(&install_wasm.step);
 
-    // --- zig build sync -----------------------------------------------------
+    // ---- zig build sync ------------------------------------------------------------------------
     // For quick local iteration only. Releasing is done via pushing a version tag.
     const sync_dest = b.option(
         []const u8,

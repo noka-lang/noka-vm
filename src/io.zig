@@ -1,11 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-/// On WASM, output is a callback into JavaScript, because WASM can't write to
-/// a console on its own.
-///
+/// On WASM, output is a callback into JavaScript, because WASM can't write to a console on its own.
 /// Natively, there is no host to call into, so output goes to stdout.
-///
 /// This switch lets us just call `print()` and not have to worry about the platform we're on.
 const sink = switch (builtin.target.cpu.arch) {
     .wasm32, .wasm64 => struct {
@@ -38,9 +35,9 @@ pub fn printf(comptime fmt: []const u8, args: anytype) void {
     print(s);
 }
 
-// --- FOR TESTING -----------------------------------------------------------
-// Tests need to assert on what the VM printed, but `print` returns nothing to
-// inspect. We need to divert the output into a buffer instead.
+// ---- FOR TESTING -------------------------------------------------------------------------------
+// Tests need to assert on what the VM printed, but `print` returns nothing to inspect. We need to
+// divert the output into a buffer instead.
 
 const capture_enabled = builtin.is_test;
 

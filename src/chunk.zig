@@ -64,8 +64,8 @@ pub const Chunk = struct {
         self.writeByte(@intFromEnum(op));
     }
 
-    /// Add a constant and return its index, reusing an existing slot when an
-    /// identical value is already in the pool. On overflow return null.
+    /// Add a constant and return its index, reusing an existing slot when an identical
+    /// value is already in the pool. On overflow return null.
     pub fn addConstant(self: *Chunk, value: Value) ?u16 {
         // NOTE: this loop is definitely not efficient but should be fine for now.
         // If it starts to get out of hand replace it with a hash map.
@@ -81,5 +81,4 @@ pub const Chunk = struct {
         defer self.const_count += 1;
         return @intCast(self.const_count);
     }
-
 };

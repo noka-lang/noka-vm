@@ -1,8 +1,7 @@
 //! Native debug runner: a development tool, not a shipped artifact.
 //!
-//! The VM's real host is JavaScript, talking to `vm.wasm` (see io.zig). This
-//! binary exists so the same `interpretSource` seam can be driven from a
-//! terminal without a browser in the loop:
+//! The VM's real host is JavaScript, talking to `vm.wasm` (see io.zig). This binary exists so the
+//! same `interpretSource` seam can be driven from a terminal without a browser in the loop:
 //!
 //!     noka -- '1 + 2 * 3'
 //!     noka --disc <file>
@@ -26,8 +25,7 @@ pub fn main(init: std.process.Init) !u8 {
         return @intCast(noka.interpretDisc(image));
     }
 
-    // Joining argv means the unquoted `zig build run -- 1 + 2` works too, not
-    // just the quoted form.
+    // Joining argv means the unquoted `zig build run -- 1 + 2` works too, not just the quoted form.
     const source = if (args.len > 1)
         try std.mem.join(arena, " ", args[1..])
     else

@@ -86,7 +86,7 @@ pub const Compiler = struct {
         }
     }
 
-    // --- parse rules --------------------------------------------------------
+    // ---- parse rules ---------------------------------------------------------------------------
 
     fn @"and"(self: *Compiler) void {
         const endJump = self.emitJump(.jump_if_false);
@@ -307,74 +307,70 @@ pub const Compiler = struct {
         _ = self;
     }
 
-    // TODO: add an entry for every new token type that can start or join an
-    // expression.
     fn getRule(t: TokenType) ParseRule {
         return switch (t) {
-            // zig fmt: off
-            .@"and" =>                  .{ .prefix = null,          .infix = &@"and",           .precedence = .@"and" },
-            .band =>                    .{ .prefix = null,          .infix = &binary,           .precedence = .band },
-            .bang =>                    .{ .prefix = &unary,        .infix = null,              .precedence = .none },
-            .bang_equal =>              .{ .prefix = null,          .infix = &binary,           .precedence = .equality },
-            .bnot =>                    .{ .prefix = &unary,        .infix = null,              .precedence = .none },
-            .bor =>                     .{ .prefix = null,          .infix = &binary,           .precedence = .bor },
-            .bracket_left =>            .{ .prefix = &array,        .infix = &index,            .precedence = .call },
-            .bxor =>                    .{ .prefix = null,          .infix = &binary,           .precedence = .bxor },
-            .case =>                    .{ .prefix = &caseExpr,     .infix = null,              .precedence = .none },
-            .curly_left =>              .{ .prefix = &object,       .infix = null,              .precedence = .none },
-            .do =>                      .{ .prefix = &blockExpr,    .infix = null,              .precedence = .none },
-            .dot =>                     .{ .prefix = null,          .infix = &dot,              .precedence = .call },
-            .equal =>                   .{ .prefix = null,          .infix = &assign,           .precedence = .assignment },
-            .equal_equal =>             .{ .prefix = null,          .infix = &binary,           .precedence = .equality },
-            .false =>                   .{ .prefix = &literal,      .infix = null,              .precedence = .none },
-            .@"for" =>                  .{ .prefix = &forExpr,      .infix = null,              .precedence = .none },
-            .@"fn" =>                   .{ .prefix = &function,     .infix = null,              .precedence = .none },
-            .greater =>                 .{ .prefix = null,          .infix = &binary,           .precedence = .comparison },
-            .greater_equal =>           .{ .prefix = null,          .infix = &binary,           .precedence = .comparison },
-            .greater_greater =>         .{ .prefix = null,          .infix = &binary,           .precedence = .shift },
-            .greater_greater_equal =>   .{ .prefix = null,          .infix = &assign,           .precedence = .assignment },
-            .identifier =>              .{ .prefix = &variable,     .infix = null,              .precedence = .none },
-            .in =>                      .{ .prefix = null,          .infix = &binary,           .precedence = .comparison },
-            .less =>                    .{ .prefix = null,          .infix = &binary,           .precedence = .comparison },
-            .less_equal =>              .{ .prefix = null,          .infix = &binary,           .precedence = .comparison },
-            .less_less =>               .{ .prefix = null,          .infix = &binary,           .precedence = .shift },
-            .less_less_equal =>         .{ .prefix = null,          .infix = &assign,           .precedence = .assignment },
-            .minus =>                   .{ .prefix = &unary,        .infix = &binary,           .precedence = .term },
-            .minus_equal =>             .{ .prefix = null,          .infix = &assign,           .precedence = .assignment },
-            .minus_minus =>             .{ .prefix = null,          .infix = &decrement,        .precedence = .assignment },
-            .modulo =>                  .{ .prefix = null,          .infix = &binary,           .precedence = .factor },
-            .modulo_equal =>            .{ .prefix = null,          .infix = &assign,           .precedence = .assignment },
-            .nil =>                     .{ .prefix = &literal,      .infix = null,              .precedence = .none },
-            .not =>                     .{ .prefix = &unary,        .infix = &notIn,            .precedence = .comparison },
-            .number =>                  .{ .prefix = &number,       .infix = null,              .precedence = .none },
-            .@"or" =>                   .{ .prefix = null,          .infix = &@"or",            .precedence = .@"or" },
-            .paren_left =>              .{ .prefix = &grouping,     .infix = &call,             .precedence = .call },
-            .pipe_arrow =>              .{ .prefix = null,          .infix = &pipe,             .precedence = .pipe },
-            .plus =>                    .{ .prefix = null,          .infix = &binary,           .precedence = .term },
-            .plus_equal =>              .{ .prefix = null,          .infix = &assign,           .precedence = .assignment },
-            .plus_plus =>               .{ .prefix = null,          .infix = &increment,        .precedence = .assignment },
-            .question =>                .{ .prefix = null,          .infix = &optional,         .precedence = .optional },
-            .question_bracket =>        .{ .prefix = null,          .infix = &optionalIndex,    .precedence = .call },
-            .question_dot =>            .{ .prefix = null,          .infix = &optionalDot,      .precedence = .call },
-            .question_paren =>          .{ .prefix = null,          .infix = &optionalCall,     .precedence = .call },
-            .question_question =>       .{ .prefix = null,          .infix = &fallback,         .precedence = .fallback },
-            .slash =>                   .{ .prefix = null,          .infix = &binary,           .precedence = .factor },
-            .slash_equal =>             .{ .prefix = null,          .infix = &assign,           .precedence = .assignment },
-            .star =>                    .{ .prefix = null,          .infix = &binary,           .precedence = .factor },
-            .star_equal =>              .{ .prefix = null,          .infix = &assign,           .precedence = .assignment },
-            .star_star =>               .{ .prefix = null,          .infix = &binary,           .precedence = .exponent },
-            .star_star_equal =>         .{ .prefix = null,          .infix = &assign,           .precedence = .assignment },
-            .string =>                  .{ .prefix = &string,       .infix = null,              .precedence = .none },
-            .this =>                    .{ .prefix = &this,         .infix = null,              .precedence = .none },
-            .true =>                    .{ .prefix = &literal,      .infix = null,              .precedence = .none },
-            .underscore =>              .{ .prefix = &literal,      .infix = null,              .precedence = .none },
-            .@"while" =>                .{ .prefix = &whileExpr,    .infix = null,              .precedence = .none },
-            // zig fmt: on
+            .@"and" => .{ .prefix = null, .infix = &@"and", .precedence = .@"and" },
+            .band => .{ .prefix = null, .infix = &binary, .precedence = .band },
+            .bang => .{ .prefix = &unary, .infix = null, .precedence = .none },
+            .bang_equal => .{ .prefix = null, .infix = &binary, .precedence = .equality },
+            .bnot => .{ .prefix = &unary, .infix = null, .precedence = .none },
+            .bor => .{ .prefix = null, .infix = &binary, .precedence = .bor },
+            .bracket_left => .{ .prefix = &array, .infix = &index, .precedence = .call },
+            .bxor => .{ .prefix = null, .infix = &binary, .precedence = .bxor },
+            .case => .{ .prefix = &caseExpr, .infix = null, .precedence = .none },
+            .curly_left => .{ .prefix = &object, .infix = null, .precedence = .none },
+            .do => .{ .prefix = &blockExpr, .infix = null, .precedence = .none },
+            .dot => .{ .prefix = null, .infix = &dot, .precedence = .call },
+            .equal => .{ .prefix = null, .infix = &assign, .precedence = .assignment },
+            .equal_equal => .{ .prefix = null, .infix = &binary, .precedence = .equality },
+            .false => .{ .prefix = &literal, .infix = null, .precedence = .none },
+            .@"for" => .{ .prefix = &forExpr, .infix = null, .precedence = .none },
+            .@"fn" => .{ .prefix = &function, .infix = null, .precedence = .none },
+            .greater => .{ .prefix = null, .infix = &binary, .precedence = .comparison },
+            .greater_equal => .{ .prefix = null, .infix = &binary, .precedence = .comparison },
+            .greater_greater => .{ .prefix = null, .infix = &binary, .precedence = .shift },
+            .greater_greater_equal => .{ .prefix = null, .infix = &assign, .precedence = .assignment },
+            .identifier => .{ .prefix = &variable, .infix = null, .precedence = .none },
+            .in => .{ .prefix = null, .infix = &binary, .precedence = .comparison },
+            .less => .{ .prefix = null, .infix = &binary, .precedence = .comparison },
+            .less_equal => .{ .prefix = null, .infix = &binary, .precedence = .comparison },
+            .less_less => .{ .prefix = null, .infix = &binary, .precedence = .shift },
+            .less_less_equal => .{ .prefix = null, .infix = &assign, .precedence = .assignment },
+            .minus => .{ .prefix = &unary, .infix = &binary, .precedence = .term },
+            .minus_equal => .{ .prefix = null, .infix = &assign, .precedence = .assignment },
+            .minus_minus => .{ .prefix = null, .infix = &decrement, .precedence = .assignment },
+            .modulo => .{ .prefix = null, .infix = &binary, .precedence = .factor },
+            .modulo_equal => .{ .prefix = null, .infix = &assign, .precedence = .assignment },
+            .nil => .{ .prefix = &literal, .infix = null, .precedence = .none },
+            .not => .{ .prefix = &unary, .infix = &notIn, .precedence = .comparison },
+            .number => .{ .prefix = &number, .infix = null, .precedence = .none },
+            .@"or" => .{ .prefix = null, .infix = &@"or", .precedence = .@"or" },
+            .paren_left => .{ .prefix = &grouping, .infix = &call, .precedence = .call },
+            .pipe_arrow => .{ .prefix = null, .infix = &pipe, .precedence = .pipe },
+            .plus => .{ .prefix = null, .infix = &binary, .precedence = .term },
+            .plus_equal => .{ .prefix = null, .infix = &assign, .precedence = .assignment },
+            .plus_plus => .{ .prefix = null, .infix = &increment, .precedence = .assignment },
+            .question => .{ .prefix = null, .infix = &optional, .precedence = .optional },
+            .question_bracket => .{ .prefix = null, .infix = &optionalIndex, .precedence = .call },
+            .question_dot => .{ .prefix = null, .infix = &optionalDot, .precedence = .call },
+            .question_paren => .{ .prefix = null, .infix = &optionalCall, .precedence = .call },
+            .question_question => .{ .prefix = null, .infix = &fallback, .precedence = .fallback },
+            .slash => .{ .prefix = null, .infix = &binary, .precedence = .factor },
+            .slash_equal => .{ .prefix = null, .infix = &assign, .precedence = .assignment },
+            .star => .{ .prefix = null, .infix = &binary, .precedence = .factor },
+            .star_equal => .{ .prefix = null, .infix = &assign, .precedence = .assignment },
+            .star_star => .{ .prefix = null, .infix = &binary, .precedence = .exponent },
+            .star_star_equal => .{ .prefix = null, .infix = &assign, .precedence = .assignment },
+            .string => .{ .prefix = &string, .infix = null, .precedence = .none },
+            .this => .{ .prefix = &this, .infix = null, .precedence = .none },
+            .true => .{ .prefix = &literal, .infix = null, .precedence = .none },
+            .underscore => .{ .prefix = &literal, .infix = null, .precedence = .none },
+            .@"while" => .{ .prefix = &whileExpr, .infix = null, .precedence = .none },
             else => .{},
         };
     }
 
-    // --- token plumbing -----------------------------------------------------
+    // ---- token plumbing ------------------------------------------------------------------------
 
     fn advance(self: *Compiler) void {
         self.previous = self.current;
@@ -395,7 +391,7 @@ pub const Compiler = struct {
         self.errorAtCurrent(msg);
     }
 
-    // --- emit helpers -------------------------------------------------------
+    // ---- emit helpers --------------------------------------------------------------------------
 
     fn emitOp(self: *Compiler, op: OpCode) void {
         self.chunk.writeOp(op);
@@ -436,9 +432,9 @@ pub const Compiler = struct {
         self.chunk.code[offset + 1] = @intCast(jump & 0xff);
     }
 
-    // --- error reporting ----------------------------------------------------
-    // TODO: include line numbers (once tokens carry them) and recover at
-    // statement boundaries (synchronize) instead of bailing on first error.
+    // ---- error reporting -----------------------------------------------------------------------
+    // TODO: include line numbers (once tokens carry them) and recover at statement boundaries
+    // (synchronize) instead of bailing on first error.
 
     fn errorAtCurrent(self: *Compiler, msg: []const u8) void {
         self.errorAt(self.current, msg);
@@ -448,8 +444,8 @@ pub const Compiler = struct {
         self.errorAt(self.previous, msg);
     }
 
-    // `++` only concatenates comptime-known values, so messages that interpolate
-    // a token or a count have to be formatted into a buffer at runtime.
+    // `++` only concatenates comptime-known values, so messages that interpolate a token or a
+    // count have to be formatted into a buffer at runtime.
     fn errorAtCurrentFmt(self: *Compiler, comptime fmt: []const u8, args: anytype) void {
         var buf: [256]u8 = undefined;
         self.errorAt(self.current, std.fmt.bufPrint(&buf, fmt, args) catch fmt);
