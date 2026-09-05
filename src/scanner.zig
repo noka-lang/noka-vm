@@ -110,6 +110,8 @@ pub const Scanner = struct {
             '=' => self.make(if (self.match('=')) .equal_equal else .equal),
             '>' => self.make(if (self.match('=')) .greater_equal else if (self.match('>')) .greater_greater else .greater),
             '<' => self.make(if (self.match('=')) .less_equal else if (self.match('<')) .less_less else .less),
+            ':' => self.make(.colon),
+            '#' => self.make(.pound),
             '"', '\'' => self.string(c),
             else => self.errorToken(self.src[self.start..self.current]),
         };
