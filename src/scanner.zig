@@ -29,6 +29,37 @@ pub const Token = struct {
     message: ?[]const u8 = null,
 };
 
+const keywords = std.StaticStringMap(TokenType).initComptime(.{
+    .{ "and", .@"and" },
+    .{ "band", .band },
+    .{ "bnot", .bnot },
+    .{ "bor", .bor },
+    .{ "bxor", .bxor },
+    .{ "case", .case },
+    .{ "catch", .@"catch" },
+    .{ "do", .do },
+    .{ "draw", .draw },
+    .{ "end", .end },
+    .{ "err", .err },
+    .{ "false", .false },
+    .{ "fn", .@"fn" },
+    .{ "for", .@"for" },
+    .{ "if", .@"if" },
+    .{ "in", .in },
+    .{ "init", .init },
+    .{ "next", .next },
+    .{ "nil", .nil },
+    .{ "not", .not },
+    .{ "or", .@"or" },
+    .{ "ret", .ret },
+    .{ "stop", .stop },
+    .{ "this", .this },
+    .{ "tick", .tick },
+    .{ "true", .true },
+    .{ "while", .@"while" },
+    .{ "_", .underscore },
+});
+
 pub const Scanner = struct {
     src: []const u8,
     start: usize = 0,
@@ -118,12 +149,14 @@ pub const Scanner = struct {
     fn identifier(self: *Scanner) Token {
         while (isAlpha(self.peek()) or isDigit(self.peek())) _ = self.advance();
 
+        const lexeme = self.src[self.start..self.current];
+
         // TODO: `f` and `m` string prefixes
         if (self.peek() == '"' or self.peek() == '\'') {
-            if (isStringPrefix(self.src[self.start..self.current])) return self.errorTokenMsg("string prefixes are not supported (yet)");
+            if (isStringPrefix(lexeme)) return self.errorTokenMsg("string prefixes are not supported (yet)");
         }
 
-        return self.make(self.identifierType());
+        return self.make(keywords.get(lexeme) orelse .identifier);
     }
 
     fn isStringPrefix(lexeme: []const u8) bool {
@@ -132,76 +165,6 @@ pub const Scanner = struct {
         }
 
         return false;
-    }
-
-    fn identifierType(self: Scanner) TokenType {
-        // TODO: on mismatch return .identifier instead of .error
-        return switch (self.src[self.start]) {
-            'a' => self.checkKeyword(1, 2, "nd", .@"and"),
-            'b' => if (self.current - self.start > 2) switch (self.src[self.start + 1]) {
-                'a' => self.checkKeyword(2, 2, "nd", .band),
-                'n' => self.checkKeyword(2, 2, "ot", .bnot),
-                'o' => self.checkKeyword(2, 1, "r", .bor),
-                'x' => self.checkKeyword(2, 2, "or", .bxor),
-                else => null,
-            } else null,
-            'c' => if (self.current - self.start > 3) switch (self.src[self.start + 1]) {
-                'a' => switch (self.src[self.start + 2]) {
-                    's' => self.checkKeyword(3, 1, "e", .case),
-                    't' => self.checkKeyword(3, 2, "ch", .@"catch"),
-                    else => null,
-                },
-                else => null,
-            } else null,
-            'd' => if (self.current - self.start > 1) switch (self.src[self.start + 1]) {
-                'r' => self.checkKeyword(2, 2, "aw", .draw),
-                else => self.checkKeyword(1, 1, "o", .do),
-            } else null,
-            'e' => if (self.current - self.start > 2) switch (self.src[self.start + 1]) {
-                'n' => self.checkKeyword(2, 1, "d", .end),
-                'r' => self.checkKeyword(2, 1, "r", .err),
-                else => null,
-            } else null,
-            'f' => if (self.current - self.start > 1) switch (self.src[self.start + 1]) {
-                'a' => self.checkKeyword(2, 3, "lse", .false),
-                'n' => self.checkKeyword(1, 1, "n", .@"fn"),
-                'o' => self.checkKeyword(2, 1, "r", .@"for"),
-                else => null,
-            } else null,
-            'i' => if (self.current - self.start > 1) switch (self.src[self.start + 1]) {
-                'f' => self.checkKeyword(1, 1, "f", .@"if"),
-                'n' => if (self.current - self.start > 2) switch (self.src[self.start + 2]) {
-                    'i' => self.checkKeyword(3, 1, "t", .init),
-                    else => null,
-                } else self.checkKeyword(1, 1, "n", .in),
-                else => null,
-            } else null,
-            'n' => if (self.current - self.start > 2) switch (self.src[self.start + 1]) {
-                'e' => self.checkKeyword(2, 2, "xt", .next),
-                'i' => self.checkKeyword(2, 1, "l", .nil),
-                'o' => self.checkKeyword(2, 1, "t", .not),
-                else => null,
-            } else null,
-            'o' => self.checkKeyword(1, 1, "r", .@"or"),
-            'r' => self.checkKeyword(1, 2, "et", .ret),
-            's' => self.checkKeyword(1, 3, "top", .stop),
-            't' => if (self.current - self.start > 3) switch (self.src[self.start + 1]) {
-                'h' => self.checkKeyword(2, 2, "is", .this),
-                'i' => self.checkKeyword(2, 2, "ck", .tick),
-                'r' => self.checkKeyword(2, 2, "ue", .true),
-                else => null,
-            } else null,
-            'w' => self.checkKeyword(1, 4, "hile", .@"while"),
-            else => null,
-        } orelse .identifier;
-    }
-
-    fn checkKeyword(self: Scanner, start: usize, length: usize, rest: []const u8, @"type": TokenType) TokenType {
-        if (self.current - self.start == start + length and std.mem.eql(u8, self.src[self.start + start .. self.start + start + length], rest)) {
-            return @"type";
-        }
-
-        return .identifier;
     }
 
     fn make(self: Scanner, t: TokenType) Token {
