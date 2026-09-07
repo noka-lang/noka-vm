@@ -136,12 +136,12 @@ const VM = struct {
 
     fn toInt32(self: *VM, n: f64) ?i32 {
         if (@trunc(n) != n) {
-            _ = self.runtimeError("bitwise expected whole number, got {d}.", .{n});
+            _ = self.runtimeError("bitwise expected whole number, got {d}", .{n});
             return null;
         }
 
         if (n < std.math.minInt(i32) or n > std.math.maxInt(i32)) {
-            _ = self.runtimeError("bitwise expected 32-bit number, got {d}.", .{n});
+            _ = self.runtimeError("bitwise expected 32-bit number, got {d}", .{n});
             return null;
         }
 
@@ -173,7 +173,7 @@ const VM = struct {
                     const a = self.pop();
 
                     if (a != .number or b != .number) {
-                        return self.runtimeError("compare expected two numbers, got {s} and {s}.", .{ a.typeName(), b.typeName() });
+                        return self.runtimeError("compare expected two numbers, got {s} and {s}", .{ a.typeName(), b.typeName() });
                     }
 
                     self.push(.{ .boolean = switch (op) {
@@ -192,7 +192,7 @@ const VM = struct {
                         builder.pushSlice(b.string.bytes);
 
                         const joined = builder.finish() orelse {
-                            return self.runtimeError("out of string memory.", .{});
+                            return self.runtimeError("out of string memory", .{});
                         };
 
                         self.push(.{ .string = joined });
@@ -200,7 +200,7 @@ const VM = struct {
                     }
 
                     if (a != .number or b != .number) {
-                        return self.runtimeError("'add' expected two numbers or strings, got {s} and {s}.", .{ a.typeName(), b.typeName() });
+                        return self.runtimeError("'add' expected two numbers or strings, got {s} and {s}", .{ a.typeName(), b.typeName() });
                     }
 
                     self.push(.{ .number = a.number + b.number });
@@ -210,7 +210,7 @@ const VM = struct {
                     const a = self.pop();
 
                     if (a != .number or b != .number) {
-                        return self.runtimeError("'{s}' expected two numbers, got {s} and {s}.", .{ @tagName(op), a.typeName(), b.typeName() });
+                        return self.runtimeError("'{s}' expected two numbers, got {s} and {s}", .{ @tagName(op), a.typeName(), b.typeName() });
                     }
 
                     self.push(.{ .number = switch (op) {
@@ -228,7 +228,7 @@ const VM = struct {
                     const a = self.pop();
 
                     if (a != .number or b != .number) {
-                        return self.runtimeError("'{s}' expected two numbers, got {s} and {s}.", .{ @tagName(op), a.typeName(), b.typeName() });
+                        return self.runtimeError("'{s}' expected two numbers, got {s} and {s}", .{ @tagName(op), a.typeName(), b.typeName() });
                     }
 
                     const ai = self.toInt32(a.number) orelse return false;
@@ -237,7 +237,7 @@ const VM = struct {
                     const sh: u5 = switch (op) {
                         .shift_left, .shift_right => blk: {
                             if (bi < 0 or bi > 31) {
-                                return self.runtimeError("'{s}' expected shift of 0-31, got {d}.", .{ @tagName(op), bi });
+                                return self.runtimeError("'{s}' expected shift of 0-31, got {d}", .{ @tagName(op), bi });
                             }
                             break :blk @intCast(bi);
                         },
@@ -257,7 +257,7 @@ const VM = struct {
                     const v = self.pop();
 
                     if (v != .number) {
-                        return self.runtimeError("negate expected number, got {s}.", .{v.typeName()});
+                        return self.runtimeError("negate expected number, got {s}", .{v.typeName()});
                     }
 
                     self.push(.{ .number = -v.number });
@@ -266,7 +266,7 @@ const VM = struct {
                     const v = self.pop();
 
                     if (v != .boolean) {
-                        return self.runtimeError("'not' expected boolean, got {s}.", .{v.typeName()});
+                        return self.runtimeError("'not' expected boolean, got {s}", .{v.typeName()});
                     }
 
                     self.push(.{ .boolean = !v.boolean });
@@ -277,7 +277,7 @@ const VM = struct {
 
                     // TODO: arrays and objects
                     if (needle != .string or haystack != .string) {
-                        return self.runtimeError("'in' expected two strings, got {s} and {s}.", .{ needle.typeName(), haystack.typeName() });
+                        return self.runtimeError("'in' expected two strings, got {s} and {s}", .{ needle.typeName(), haystack.typeName() });
                     }
 
                     self.push(.{ .boolean = std.mem.indexOf(u8, haystack.string.bytes, needle.string.bytes) != null });
@@ -286,11 +286,15 @@ const VM = struct {
                     const v = self.pop();
 
                     if (v != .number) {
-                        return self.runtimeError("'bnot' expected number, got {s}.", .{v.typeName()});
+                        return self.runtimeError("'bnot' expected number, got {s}", .{v.typeName()});
                     }
 
                     const vi = self.toInt32(v.number) orelse return false;
                     self.push(.{ .number = @floatFromInt(~vi) });
+                },
+                .print => {
+                    self.pop().print();
+                    io.print("\n");
                 },
                 .jump => {
                     const offset = self.readShort();
@@ -300,7 +304,7 @@ const VM = struct {
                     const offset = self.readShort();
                     const cond = self.peek(0);
                     if (cond != .boolean) {
-                        return self.runtimeError("condition expected boolean, got {s}.", .{cond.typeName()});
+                        return self.runtimeError("condition expected boolean, got {s}", .{cond.typeName()});
                     }
 
                     if (cond.boolean == false) self.ip += offset;
@@ -330,7 +334,7 @@ const VM = struct {
     fn runtimeError(self: *VM, comptime message: []const u8, args: anytype) bool {
         // TODO: print line number
         _ = self;
-        io.printf("runtime error: " ++ message ++ "\n", args);
+        io.printf("runtime error: " ++ message ++ ".\n", args);
 
         return false;
     }
