@@ -535,8 +535,10 @@ test "newlines around a lone expression are dropped" {
 }
 
 test "newline between expressions separates" {
-    try expectFailure("1\n2", "compile error at '\\n': expected end of expression.");
-    try expectFailure("1\n  \n2", "compile error at '\\n': expected end of expression.");
+    try expectOutput("1\n2", "2");
+    try expectOutput("1\n  \n2", "2");
+    try expectOutput("1 + 1\n2 * 3", "6");
+    try expectFailure("1 2", "compile error at '2': expected end of statement.");
 }
 
 test "compile errors are reported, not executed" {

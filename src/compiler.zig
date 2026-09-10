@@ -54,9 +54,12 @@ pub const Compiler = struct {
         var parser = Compiler{ .scanner = Scanner.init(source), .chunk = chunk };
         parser.advance();
 
-        if (parser.current.type != .eof) parser.expression();
+        while (!parser.check(.eof)) {
+            parser.declaration();
+        }
 
         parser.consume(.eof, "expected end of expression");
+        // TODO: this is a bit of a hack to make output work until the print keyword is added
         parser.emitOp(.@"return");
 
         if (chunk.overflow) {
@@ -65,6 +68,27 @@ pub const Compiler = struct {
         }
 
         return !parser.had_error;
+    }
+
+    fn declaration(self: *Compiler) void {
+        self.statement();
+    }
+
+    fn statement(self: *Compiler) void {
+        // TODO: fn, print, for, if, while, block
+        self.expressionStatement();
+    }
+
+    fn endStatement(self: *Compiler) void {
+        if (self.match(.newline)) return;
+        if (self.check(.eof)) return;
+
+        self.errorAtCurrent("expected end of statement");
+    }
+
+    fn expressionStatement(self: *Compiler) void {
+        self.expression();
+        self.endStatement();
     }
 
     fn expression(self: *Compiler) void {
@@ -377,16 +401,23 @@ pub const Compiler = struct {
 
         while (true) {
             self.current = self.scanner.next();
-            if (self.current.type != .@"error") break;
+            if (!self.check(.@"error")) break;
             self.errorAtCurrent(self.current.message orelse "unexpected character");
         }
     }
 
+    fn check(self: *Compiler, t: TokenType) bool {
+        return self.current.type == t;
+    }
+
+    fn match(self: *Compiler, t: TokenType) bool {
+        if (!self.check(t)) return false;
+        self.advance();
+        return true;
+    }
+
     fn consume(self: *Compiler, t: TokenType, msg: []const u8) void {
-        if (self.current.type == t) {
-            self.advance();
-            return;
-        }
+        if (self.match(t)) return;
 
         self.errorAtCurrent(msg);
     }
