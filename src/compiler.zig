@@ -34,6 +34,8 @@ const Precedence = enum(u8) {
     primary,
 };
 
+pub const Mutability = enum { mutable, constant };
+
 pub const Compiler = struct {
     scanner: Scanner,
     chunk: *Chunk,
@@ -41,6 +43,7 @@ pub const Compiler = struct {
     previous: Token = undefined,
     had_error: bool = false,
     panic_mode: bool = false,
+    can_assign: bool = false,
 
     const ParseFn = *const fn (*Compiler) void;
     const ParseRule = struct {
@@ -71,7 +74,32 @@ pub const Compiler = struct {
     }
 
     fn declaration(self: *Compiler) void {
+        if (self.check(.identifier)) {
+            self.advance();
+
+            switch (self.current.type) {
+                .colon => return self.binding(.mutable),
+                .pound => return self.binding(.constant),
+                else => return self.finishExpressionStatement(),
+            }
+        }
+
         self.statement();
+    }
+
+    fn binding(self: *Compiler, mut: Mutability) void {
+        // name is in `previous` and `:` or `#` is in `current`.
+        // advnace to ge the initializer value (mandatory)
+        const global = self.identifierConstant(self.previous);
+        self.advance();
+
+        self.expression();
+        self.endStatement();
+
+        if (global) |slot| self.emitOpWithIndex(switch (mut) {
+            .mutable => .define_global,
+            .constant => .define_const,
+        }, slot);
     }
 
     fn statement(self: *Compiler) void {
@@ -91,21 +119,43 @@ pub const Compiler = struct {
         self.endStatement();
     }
 
+    fn finishExpressionStatement(self: *Compiler) void {
+        self.parseFromPrevious(.assignment);
+        self.endStatement();
+    }
+
+    fn identifierConstant(self: *Compiler, name: Token) ?u16 {
+        const interned = strings.intern(name.lexeme) orelse {
+            self.errorAt(name, "out of string memory");
+            return null;
+        };
+
+        return self.chunk.addConstant(.{ .string = interned });
+    }
+
     fn expression(self: *Compiler) void {
         self.parsePrecedence(.assignment);
     }
 
     fn parsePrecedence(self: *Compiler, prec: Precedence) void {
         self.advance();
+        self.parseFromPrevious(prec);
+    }
+
+    fn parseFromPrevious(self: *Compiler, prec: Precedence) void {
+        const can_assign = @intFromEnum(prec) <= @intFromEnum(Precedence.assignment);
+
         const prefix_rule = getRule(self.previous.type).prefix orelse {
             self.errorAtPrevious("expected expression");
             return;
         };
+        self.can_assign = can_assign;
         prefix_rule(self);
 
         while (@intFromEnum(prec) <= @intFromEnum(getRule(self.current.type).precedence)) {
             self.advance();
             const infix_rule = getRule(self.previous.type).infix.?;
+            self.can_assign = can_assign;
             infix_rule(self);
         }
     }
@@ -125,7 +175,7 @@ pub const Compiler = struct {
     }
 
     fn assign(self: *Compiler) void {
-        _ = self;
+        self.errorAtPrevious("invalid assignment target");
     }
 
     fn binary(self: *Compiler) void {
@@ -324,7 +374,15 @@ pub const Compiler = struct {
     }
 
     fn variable(self: *Compiler) void {
-        _ = self;
+        const global = self.identifierConstant(self.previous) orelse return;
+
+        if (self.can_assign and self.match(.equal)) {
+            self.expression();
+            self.emitOpWithIndex(.set_global, global);
+            return;
+        }
+
+        self.emitOpWithIndex(.get_global, global);
     }
 
     fn whileExpr(self: *Compiler) void {
@@ -438,10 +496,14 @@ pub const Compiler = struct {
     }
 
     fn emitConstant(self: *Compiler, value: Value) void {
-        const v = self.chunk.addConstant(value) orelse return;
-        self.emitOp(.constant);
-        self.emitByte(@intCast((v >> 8) & 0xff));
-        self.emitByte(@intCast(v & 0xff));
+        const slot = self.chunk.addConstant(value) orelse return;
+        self.emitOpWithIndex(.constant, slot);
+    }
+
+    fn emitOpWithIndex(self: *Compiler, op: OpCode, slot: u16) void {
+        self.emitOp(op);
+        self.emitByte(@intCast((slot >> 8) & 0xff));
+        self.emitByte(@intCast(slot & 0xff));
     }
 
     fn emitJump(self: *Compiler, op: OpCode) usize {

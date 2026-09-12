@@ -7,6 +7,7 @@ const debug = @import("debug.zig");
 const Value = @import("value.zig").Value;
 const disc_mod = @import("disc.zig");
 const strings = @import("strings.zig");
+const Mutability = @import("compiler.zig").Mutability;
 
 const debug_print_bytecode = false;
 const debug_trace_execution = false;
@@ -26,8 +27,7 @@ export fn disc_cap() usize {
 export fn init() void {
     fba.reset();
     strings.reset();
-    //TODO: once the VM holds globals, reset them here too so each run (or REPL
-    // line) starts clean.
+    globals_count = 0;
 }
 
 var chunk: Chunk = undefined;
@@ -91,6 +91,27 @@ fn compileAndRun(source: []const u8) i32 {
     var vm = VM{ .chunk = &chunk };
 
     return if (vm.run()) 0 else 1;
+}
+
+// ---- globals -----------------------------------------------------------------------------------
+
+const globals_max = 256;
+
+const Global = struct {
+    name: *const strings.String,
+    value: Value,
+    mutability: Mutability,
+};
+
+var globals: [globals_max]Global = undefined;
+var globals_count: usize = 0;
+
+fn findGlobal(name: *const strings.String) ?*Global {
+    for (globals[0..globals_count]) |*global| {
+        if (global.name == name) return global;
+    }
+
+    return null;
 }
 
 // ---- VM ----------------------------------------------------------------------------------------
@@ -313,6 +334,45 @@ const VM = struct {
                     const offset = self.readShort();
                     if (self.peek(0) != .nil) self.ip += offset;
                 },
+                .define_global, .define_const => {
+                    const name = self.readConstant().string;
+
+                    if (findGlobal(name) != null) {
+                        return self.runtimeError("'{s}' has already been declared", .{name.bytes});
+                    }
+
+                    if (globals_count >= globals_max) {
+                        return self.runtimeError("globals limit exceeded", .{});
+                    }
+
+                    globals[globals_count] = .{ .name = name, .value = self.pop(), .mutability = switch (op) {
+                        .define_const => .constant,
+                        .define_global => .mutable,
+                        else => unreachable,
+                    } };
+
+                    globals_count += 1;
+                },
+                .get_global => {
+                    const name = self.readConstant().string;
+                    const global = findGlobal(name) orelse {
+                        return self.runtimeError("undefined variable '{s}'", .{name.bytes});
+                    };
+
+                    self.push(global.value);
+                },
+                .set_global => {
+                    const name = self.readConstant().string;
+                    const global = findGlobal(name) orelse {
+                        return self.runtimeError("undefined variable '{s}'", .{name.bytes});
+                    };
+
+                    if (global.mutability == .constant) {
+                        return self.runtimeError("'{s}' is constant and cannot be reassigned", .{name.bytes});
+                    }
+
+                    global.value = self.peek(0);
+                },
                 .@"return" => {
                     // Temporary: print the result of the top-level expression.
                     // TODO: real `return` belongs to function calls; a top-level program should
@@ -323,8 +383,8 @@ const VM = struct {
                     }
                     return true;
                 },
-                else => {
-                    io.printf("runtime error: unknown opcode {d}.\n", .{op});
+                _ => {
+                    io.printf("runtime error: unknown opcode {s}.\n", .{@tagName(op)});
                     return false;
                 },
             }
@@ -527,6 +587,45 @@ test "unterminated/unsupported strings" {
     try expectFailure("f\"hi\"", "compile error at 'f': string prefixes are not supported (yet).");
     try expectFailure("m'hi'", "compile error at 'm': string prefixes are not supported (yet).");
 }
+
+test "global declarations" {
+    try expectOutput("x : 10\nx", "10");
+    try expectOutput("x : 10\nx + 5", "15");
+    try expectOutput("greeting : \"hi\"\ngreeting + \" there\"", "hi there");
+    try expectOutput("a : 1\nb : 2\na + b", "3");
+}
+
+test "assignment is an expression" {
+    try expectOutput("x : 10\nx = 20\nx", "20");
+    try expectOutput("x : 10\nx = 20", "20");
+    try expectOutput("x : 10\ny : x = 5\ny + x", "10");
+}
+
+test "constants cannot be reassigned" {
+    try expectOutput("PI # 3.14\nPI", "3.14");
+    try expectFailure("PI # 3.14\nPI = 0", "runtime error: 'PI' is constant and cannot be reassigned.");
+}
+
+test "undeclared and redeclared are runtime errors" {
+    try expectFailure("y", "runtime error: undefined variable 'y'.");
+    try expectFailure("y = 5", "runtime error: undefined variable 'y'.");
+    try expectFailure("x : 10\nx : 20", "runtime error: 'x' has already been declared.");
+    try expectFailure("x : 10\nx # 20", "runtime error: 'x' has already been declared.");
+}
+
+test "declarations require an initializer" {
+    try expectFailure("x :", "compile error at end: expected expression.");
+    try expectFailure("a : 1\nb : 2\nc : 3\na * b = c", "compile error at '=': invalid assignment target.");
+}
+
+test "globals reset between runs" {
+    io.beginCapture();
+    defer io.endCapture();
+    try testing.expectEqual(@as(i32, 0), interpretSource("x : 1\nx"));
+    try testing.expectEqual(@as(i32, 0), interpretSource("x : 2\nx"));
+}
+
+// TODO: when arrays are added test deep-freeze
 
 test "newlines around a lone expression are dropped" {
     try expectOutput("1 + 2\n", "3");
