@@ -759,6 +759,31 @@ test "unimplemented syntax is a compile error" {
     try expectFailure("x : 1\nx(", "compile error at '(': not supported (yet).");
 }
 
+test "local constants" {
+    try expectOutput("do\n  PI # 3\n  PI * 2\nend", "6");
+    try expectFailure("do\n  PI # 3\n  PI = 4\nend", "compile error at 'PI': 'PI' is constant and cannot be reassigned.");
+    try expectFailure("do\n  PI # 3\n  PI : 4\nend", "compile error at 'PI': 'PI' has already been declared.");
+}
+
+test "every comparison pattern" {
+    try expectOutput("case 3\n  == 3 -> \"eq\"\nend", "eq");
+    try expectOutput("case 3\n  != 3 -> \"ne\"\n  _ -> \"not ne\"\nend", "not ne");
+    try expectOutput("case 3\n  < 5 -> \"lt\"\nend", "lt");
+    try expectOutput("case 5\n  <= 5 -> \"le\"\nend", "le");
+    try expectOutput("case 5\n  > 5 -> \"gt\"\n  >= 5 -> \"ge\"\nend", "ge");
+}
+
+test "case structure" {
+    try expectOutput("case 1\nend", "nil");
+    try expectOutput("case\nend", "nil");
+    try expectOutput("case 2\n  2 -> case 3\n    3 -> \"inner\"\n  end\n  _ -> \"outer\"\nend", "inner");
+    try expectOutput("do\n  a : 5\n  b : 7\n  case b\n    > a -> b - a\n    _ -> 0\n  end\nend", "2");
+    try expectOutput("do\n  r : case 1\n    1 -> 10\n  end\n  z : 5\n  r + z\nend", "15");
+    try expectFailure("case 1\n  _ -> 1\n  2 -> 3\nend", "compile error at '2': '_' must be the last branch.");
+    try expectFailure("case 1\n  1 -> 2\n", "compile error at end: expected 'end' to close 'case'.");
+    try expectFailure("case 1\n  _ -> 2\n", "compile error at end: expected 'end' to close 'case'.");
+}
+
 // ---- Disc tests --------------------------------------------------------------------------------
 
 test "eval rejects a length past the disc size" {
