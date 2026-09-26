@@ -322,7 +322,7 @@ pub const Compiler = struct {
             // `_` catch-all
             if (self.match(.underscore)) {
                 self.consume(.case_arrow, "expected '->' after '_'");
-                self.parsePrecedence(.pipe);
+                self.expression();
                 self.consume(.newline, "expected end of branch");
                 catch_all = true;
                 if (!self.check(.end)) self.errorAtCurrent("'_' must be the last branch");
@@ -366,7 +366,7 @@ pub const Compiler = struct {
 
             // body
             self.consume(.case_arrow, "expected '->' after case pattern");
-            self.parsePrecedence(.pipe);
+            self.expression();
 
             if (end_count == ends.len) {
                 self.errorAtCurrent("too many case branches");
@@ -438,7 +438,7 @@ pub const Compiler = struct {
 
         const miss = self.emitJump(.jump_if_false);
         self.emitOp(.pop);
-        self.parsePrecedence(.pipe);
+        self.expression();
         const end = self.emitJump(.jump);
 
         self.patchJump(miss);

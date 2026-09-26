@@ -693,6 +693,13 @@ test "guarded case expression" {
     try expectFailure("case 1\n  1 if 2 -> \"x\"\nend", "runtime error: condition expected boolean, got number.");
 }
 
+test "case bodies can assign" {
+    try expectOutput("status : \"\"\ncase\n  true -> status = \"healthy\"\nend\nstatus", "healthy");
+    try expectOutput("x : 0\ncase true -> x = 5\nx", "5");
+    try expectOutput("x : 0\ncase\n  false -> 1\n  _ -> x = 9\nend\nx", "9");
+    try expectOutput("x : 0\ncase 2\n  2 -> x = 7\nend\nx", "7");
+}
+
 test "newlines around a lone expression are dropped" {
     try expectOutput("1 + 2\n", "3");
     try expectOutput("\n\n1 + 2", "3");
