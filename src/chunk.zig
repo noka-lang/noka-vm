@@ -35,6 +35,7 @@ pub const OpCode = enum(u8) {
     jump,
     jump_if_false,
     jump_if_not_nil,
+    jump_if_true,
     // globals
     define_global,
     define_const,

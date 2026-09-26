@@ -334,6 +334,14 @@ const VM = struct {
                     const offset = self.readShort();
                     if (self.peek(0) != .nil) self.ip += offset;
                 },
+                .jump_if_true => {
+                    const offset = self.readShort();
+                    const cond = self.peek(0);
+                    if (cond != .boolean) {
+                        return self.runtimeError("condition expected boolean, got {s}", .{cond.typeName()});
+                    }
+                    if (cond.boolean) self.ip += offset;
+                },
                 .define_global, .define_const => {
                     const name = self.readConstant().string;
 
@@ -652,6 +660,38 @@ test "globals reset between runs" {
 
 // TODO: when arrays are added test deep-freeze
 
+test "bare case expression" {
+    try expectOutput("case 1 < 2 -> \"yes\"", "yes");
+    try expectOutput("case 1 > 2 -> \"yes\"", "nil");
+    try expectOutput("case\n  1 > 2 -> \"a\"\n  2 > 1 -> \"b\"\nend", "b");
+    try expectOutput("case\n  false -> \"a\"\n  _ -> \"fallback\"\nend", "fallback");
+    try expectOutput("x : case\n  true -> 10\nend\nx", "10");
+    try expectOutput("case true -> do\n  a : 2\n  a * 3\nend", "6");
+    try expectFailure("case 1 -> \"x\"", "runtime error: condition expected boolean, got number.");
+}
+
+test "single-pattern case expression" {
+    try expectOutput("case \"b\"\n  \"a\" -> 1\n  \"b\" -> 2\nend", "2");
+    try expectOutput("case 3\n  1 -> \"one\"\n  _ -> \"other\"\nend", "other");
+    try expectOutput("case 75\n  > 50 -> \"healthy\"\n  > 20 -> \"hurt\"\n  _ -> \"critical\"\nend", "healthy");
+    try expectOutput("case 5\n  >= 5 -> \"ok\"\nend", "ok");
+    try expectOutput("case 9\n  1 -> \"one\"\nend", "nil");
+    try expectOutput("x : case \"b\"\n  \"b\" -> 2\nend\nx", "2");
+    try expectOutput("1 + case 1\n  1 -> 2\nend", "3");
+    try expectFailure("case\n  > 5 -> \"x\"\nend", "compile error at '>': no left-hand side to compare against.");
+}
+
+test "mutli-pattern case expression" {
+    try expectOutput("case \"north\"\n  \"up\", \"north\" -> \"go north\"\n  _ -> \"?\"\nend", "go north");
+    try expectOutput("case 3\n  1, 2 -> \"low\"\n  3, 4 -> \"high\"\nend", "high");
+}
+
+test "guarded case expression" {
+    try expectOutput("case 150\n  > 100 if true -> \"epic\"\n  > 100 -> \"great\"\nend", "epic");
+    try expectOutput("case 150\n  > 100 if false -> \"epic\"\n  > 100 -> \"great\"\nend", "great");
+    try expectFailure("case 1\n  1 if 2 -> \"x\"\nend", "runtime error: condition expected boolean, got number.");
+}
+
 test "newlines around a lone expression are dropped" {
     try expectOutput("1 + 2\n", "3");
     try expectOutput("\n\n1 + 2", "3");
@@ -677,6 +717,8 @@ test "interpretSource returns nonzero on failure" {
     try testing.expectEqual(@as(i32, 0), interpretSource("1 + 1"));
     try testing.expectEqual(@as(i32, 1), interpretSource("1 +"));
 }
+
+// ---- Disc tests --------------------------------------------------------------------------------
 
 test "eval rejects a length past the disc size" {
     io.beginCapture();

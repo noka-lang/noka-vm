@@ -63,6 +63,9 @@ pub const Compiler = struct {
         mut: Mutability,
     };
 
+    const case_branch_max = 32;
+    const case_pattern_max = 16;
+
     /// Compile `source` into `chunk`. Returns false if there were errors.
     pub fn compile(source: []const u8, chunk: *Chunk) bool {
         var parser = Compiler{ .scanner = Scanner.init(source), .chunk = chunk };
@@ -310,8 +313,153 @@ pub const Compiler = struct {
         _ = self;
     }
 
+    fn caseBody(self: *Compiler, subject: ?u8) void {
+        var ends: [case_branch_max]usize = undefined;
+        var end_count: usize = 0;
+        var catch_all = false;
+
+        while (!self.check(.end) and !self.check(.eof)) {
+            // `_` catch-all
+            if (self.match(.underscore)) {
+                self.consume(.case_arrow, "expected '->' after '_'");
+                self.parsePrecedence(.pipe);
+                self.consume(.newline, "expected end of branch");
+                catch_all = true;
+                if (!self.check(.end)) self.errorAtCurrent("'_' must be the last branch");
+                break;
+            }
+
+            // patterns
+            var matches: [case_pattern_max]usize = undefined;
+            var match_count: usize = 0;
+            var fail: usize = undefined;
+
+            while (true) {
+                self.casePattern(subject);
+                if (!self.check(.comma)) {
+                    fail = self.emitJump(.jump_if_false);
+                    break;
+                }
+
+                if (match_count == matches.len) {
+                    self.errorAtCurrent("too many patterns in one branch");
+                    return;
+                }
+
+                matches[match_count] = self.emitJump(.jump_if_true);
+                match_count += 1;
+                self.advance();
+                self.emitOp(.pop);
+            }
+
+            // match
+            for (matches[0..match_count]) |j| self.patchJump(j);
+            self.emitOp(.pop);
+
+            // optional guard
+            var guard_fail: ?usize = null;
+            if (self.match(.@"if")) {
+                self.parsePrecedence(.pipe);
+                guard_fail = self.emitJump(.jump_if_false);
+                self.emitOp(.pop);
+            }
+
+            // body
+            self.consume(.case_arrow, "expected '->' after case pattern");
+            self.parsePrecedence(.pipe);
+
+            if (end_count == ends.len) {
+                self.errorAtCurrent("too many case branches");
+                return;
+            }
+            ends[end_count] = self.emitJump(.jump);
+            end_count += 1;
+
+            // next
+            self.patchJump(fail);
+            if (guard_fail) |j| self.patchJump(j);
+            self.emitOp(.pop);
+
+            self.consume(.newline, "expected end of case branch");
+        }
+
+        self.consume(.end, "expected 'end' to close 'case'");
+
+        if (!catch_all) self.emitOp(.nil);
+
+        // end
+        for (ends[0..end_count]) |j| self.patchJump(j);
+    }
+
     fn caseExpr(self: *Compiler) void {
-        _ = self;
+        if (self.match(.newline)) return self.caseBody(null);
+
+        self.parsePrecedence(.pipe);
+        if (self.check(.case_arrow)) return self.caseSingle();
+
+        self.consume(.newline, "expected '->' or a newline after 'case'");
+        self.beginScope();
+        const subject = self.declareSynthetic();
+        self.caseBody(subject);
+        self.endScope();
+    }
+
+    fn casePattern(self: *Compiler, subject: ?u8) void {
+        const op = self.current.type;
+        const comparison = switch (op) {
+            .greater, .greater_equal, .less, .less_equal, .equal_equal, .bang_equal => true,
+            else => false,
+        };
+
+        const slot = subject orelse {
+            if (comparison) return self.errorAtCurrent("no left-hand side to compare against");
+            return self.parsePrecedence(.pipe);
+        };
+
+        if (comparison) self.advance();
+        self.emitOpByte(.get_local, slot);
+        self.parsePrecedence(.pipe);
+
+        switch (if (comparison) op else .equal_equal) {
+            .equal_equal => self.emitOp(.equal),
+            .bang_equal => self.emitOps(.equal, .not),
+            .greater => self.emitOp(.greater),
+            .greater_equal => self.emitOps(.less, .not),
+            .less => self.emitOp(.less),
+            .less_equal => self.emitOps(.greater, .not),
+            else => unreachable,
+        }
+    }
+
+    // `case <cond> -> <body>`
+    // The condition is already on the stack.
+    fn caseSingle(self: *Compiler) void {
+        self.consume(.case_arrow, "expected '->' after case condition");
+
+        const miss = self.emitJump(.jump_if_false);
+        self.emitOp(.pop);
+        self.parsePrecedence(.pipe);
+        const end = self.emitJump(.jump);
+
+        self.patchJump(miss);
+        self.emitOp(.pop);
+        self.emitOp(.nil);
+
+        self.patchJump(end);
+    }
+
+    /// Reserve whatever is on top of the stack as an unnamed local. Returns its slot.
+    fn declareSynthetic(self: *Compiler) u8 {
+        const slot: u8 = @intCast(self.stack_height - 1);
+        self.locals[self.local_count] = .{
+            .name = .{ .type = .underscore, .lexeme = "", .line = 0 },
+            .slot = slot,
+            .depth = self.scope_depth,
+            .mut = .constant,
+        };
+        self.local_count += 1;
+
+        return slot;
     }
 
     fn decrement(self: *Compiler) void {
@@ -558,7 +706,7 @@ pub const Compiler = struct {
             .string => .{ .prefix = &string, .infix = null, .precedence = .none },
             .this => .{ .prefix = &this, .infix = null, .precedence = .none },
             .true => .{ .prefix = &literal, .infix = null, .precedence = .none },
-            .underscore => .{ .prefix = &literal, .infix = null, .precedence = .none },
+            .underscore => .{ .prefix = null, .infix = null, .precedence = .none },
             .@"while" => .{ .prefix = &whileExpr, .infix = null, .precedence = .none },
             else => .{},
         };
@@ -633,6 +781,10 @@ pub const Compiler = struct {
         return self.chunk.code_count - 2;
     }
 
+    fn expectHeight(self: *Compiler, h: i16) void {
+        if (!self.had_error) std.debug.assert(self.stack_height == h);
+    }
+
     fn patchJump(self: *Compiler, offset: usize) void {
         const jump = self.chunk.code_count - offset - 2;
 
@@ -689,7 +841,7 @@ fn stackEffect(op: OpCode) i8 {
         .pop, .print, .define_global, .define_const => -1, // pop one
         .equal, .greater, .less, .add, .subtract, .multiply, .divide, .modulo, .exponent, .in, .band, .bor, .bxor, .shift_left, .shift_right => -1, // pop two, push one
         .not, .negate, .bnot => 0, // pop one, push one
-        .set_global, .set_local, .jump, .jump_if_false, .jump_if_not_nil => 0, // peek
+        .set_global, .set_local, .jump, .jump_if_false, .jump_if_not_nil, .jump_if_true => 0, // peek
         .collapse => 0, // operand-dependent
         .@"return", _ => 0,
     };
