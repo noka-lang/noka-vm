@@ -402,9 +402,9 @@ Assignment (`=`), compound assignment (`+=`, `-=`, ...), and `++` / `--` are **e
 
 Every variable must be explicitly declared with `:` or `#` before use. Assignment (`=`) walks the scope chain looking for an existing binding. If none is found, it is a **runtime error**.
 
-Re-declaring a variable in the **same scope** is a runtime error. Shadowing a variable from an **outer scope** is allowed.
+Re-declaring a variable in the **same scope** is an error (runtime error at the top level, compile error inside blocks). Shadowing a variable from an **outer scope** is allowed.
 
-Constants (`#`) can never be reassigned. The value is **deep-frozen**: arrays, objects, and strings declared with `#` cannot be mutated. Attempting to reassign, push to, set fields on, or index-assign a frozen value is a runtime error.
+Constants (`#`) can never be reassigned (runtime error at the top level, compile error inside blocks). The value is **deep-frozen**: arrays, objects, and strings declared with `#` cannot be mutated. Attempting to reassign, push to, set fields on, or index-assign a frozen value is a runtime error.
 
 Field and index assignment always use `=`:
 
@@ -2065,6 +2065,7 @@ Errors include a 1-based line number in the format `[line N] message`.
 Scan and parse errors are reported before the program runs:
 - **ScanError:** invalid character or unterminated string
 - **ParseError:** unexpected token, missing `end`, etc.
+- **BindingError:** redeclaring or reassigning a local constant
 
 At runtime there are two distinct failure channels (see
 [Error Handling](#error-handling)):
