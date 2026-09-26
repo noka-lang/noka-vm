@@ -247,6 +247,11 @@ pub const Compiler = struct {
 
     // ---- parse rules ---------------------------------------------------------------------------
 
+    /// Placeholder for syntax the scanner can produce but can't be compiled (yet).
+    fn unsupported(self: *Compiler) void {
+        self.errorAtPrevious("not supported (yet)");
+    }
+
     fn @"and"(self: *Compiler) void {
         const endJump = self.emitJump(.jump_if_false);
 
@@ -256,7 +261,7 @@ pub const Compiler = struct {
     }
 
     fn array(self: *Compiler) void {
-        _ = self;
+        self.unsupported();
     }
 
     fn assign(self: *Compiler) void {
@@ -310,7 +315,7 @@ pub const Compiler = struct {
     }
 
     fn call(self: *Compiler) void {
-        _ = self;
+        self.unsupported();
     }
 
     fn caseBody(self: *Compiler, subject: ?u8) void {
@@ -470,11 +475,11 @@ pub const Compiler = struct {
     }
 
     fn decrement(self: *Compiler) void {
-        _ = self;
+        self.unsupported();
     }
 
     fn dot(self: *Compiler) void {
-        _ = self;
+        self.unsupported();
     }
 
     fn fallback(self: *Compiler) void {
@@ -486,11 +491,11 @@ pub const Compiler = struct {
     }
 
     fn forExpr(self: *Compiler) void {
-        _ = self;
+        self.unsupported();
     }
 
     fn function(self: *Compiler) void {
-        _ = self;
+        self.unsupported();
     }
     fn grouping(self: *Compiler) void {
         self.expression();
@@ -498,11 +503,11 @@ pub const Compiler = struct {
     }
 
     fn increment(self: *Compiler) void {
-        _ = self;
+        self.unsupported();
     }
 
     fn index(self: *Compiler) void {
-        _ = self;
+        self.unsupported();
     }
 
     fn literal(self: *Compiler) void {
@@ -530,7 +535,7 @@ pub const Compiler = struct {
     }
 
     fn object(self: *Compiler) void {
-        _ = self;
+        self.unsupported();
     }
 
     fn optional(self: *Compiler) void {
@@ -539,15 +544,15 @@ pub const Compiler = struct {
     }
 
     fn optionalCall(self: *Compiler) void {
-        _ = self;
+        self.unsupported();
     }
 
     fn optionalDot(self: *Compiler) void {
-        _ = self;
+        self.unsupported();
     }
 
     fn optionalIndex(self: *Compiler) void {
-        _ = self;
+        self.unsupported();
     }
 
     fn @"or"(self: *Compiler) void {
@@ -562,7 +567,7 @@ pub const Compiler = struct {
     }
 
     fn pipe(self: *Compiler) void {
-        _ = self;
+        self.unsupported();
     }
 
     fn string(self: *Compiler) void {
@@ -602,7 +607,7 @@ pub const Compiler = struct {
     }
 
     fn this(self: *Compiler) void {
-        _ = self;
+        self.unsupported();
     }
 
     fn unary(self: *Compiler) void {
@@ -653,7 +658,7 @@ pub const Compiler = struct {
     }
 
     fn whileExpr(self: *Compiler) void {
-        _ = self;
+        self.unsupported();
     }
 
     fn getRule(t: TokenType) ParseRule {

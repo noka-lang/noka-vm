@@ -751,6 +751,14 @@ test "exceeding local and stack limits are compile errors" {
     try expectFailure(w.buffered(), "compile error at '1': expression too deep.");
 }
 
+test "unimplemented syntax is a compile error" {
+    try expectFailure("1 + while", "compile error at 'while': not supported (yet).");
+    try expectFailure("x : fn", "compile error at 'fn': not supported (yet).");
+    try expectFailure("this", "compile error at 'this': not supported (yet).");
+    try expectFailure("x : 1\nx.y", "compile error at '.': not supported (yet).");
+    try expectFailure("x : 1\nx(", "compile error at '(': not supported (yet).");
+}
+
 // ---- Disc tests --------------------------------------------------------------------------------
 
 test "eval rejects a length past the disc size" {
