@@ -57,9 +57,7 @@ pub const Compiler = struct {
         var parser = Compiler{ .scanner = Scanner.init(source), .chunk = chunk };
         parser.advance();
 
-        while (!parser.check(.eof)) {
-            parser.declaration();
-        }
+        parser.block(.eof);
 
         parser.consume(.eof, "expected end of expression");
         // TODO: this is a bit of a hack to make output work until the print keyword is added
@@ -71,6 +69,16 @@ pub const Compiler = struct {
         }
 
         return !parser.had_error;
+    }
+
+    fn block(self: *Compiler, terminator: TokenType) void {
+        var count: usize = 0;
+        while (!self.check(terminator) and !self.check(.eof)) {
+            if (count > 0) self.emitOp(.pop);
+            self.declaration();
+            count += 1;
+        }
+        if (count == 0) self.emitOp(.nil);
     }
 
     fn declaration(self: *Compiler) void {
@@ -100,6 +108,8 @@ pub const Compiler = struct {
             .mutable => .define_global,
             .constant => .define_const,
         }, slot);
+
+        self.emitOp(.nil);
     }
 
     fn statement(self: *Compiler) void {
