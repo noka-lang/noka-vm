@@ -533,20 +533,22 @@ pub const Compiler = struct {
         self.errorAt(self.current, msg);
     }
 
-    fn errorAtPrevious(self: *Compiler, msg: []const u8) void {
-        self.errorAt(self.previous, msg);
+    fn errorAtCurrentFmt(self: *Compiler, comptime fmt: []const u8, args: anytype) void {
+        self.errorAtFmt(self.current, fmt, args);
     }
 
-    // `++` only concatenates comptime-known values, so messages that interpolate a token or a
-    // count have to be formatted into a buffer at runtime.
-    fn errorAtCurrentFmt(self: *Compiler, comptime fmt: []const u8, args: anytype) void {
-        var buf: [256]u8 = undefined;
-        self.errorAt(self.current, std.fmt.bufPrint(&buf, fmt, args) catch fmt);
+    fn errorAtPrevious(self: *Compiler, msg: []const u8) void {
+        self.errorAt(self.previous, msg);
     }
 
     fn errorAtPreviousFmt(self: *Compiler, comptime fmt: []const u8, args: anytype) void {
         var buf: [256]u8 = undefined;
         self.errorAt(self.previous, std.fmt.bufPrint(&buf, fmt, args) catch fmt);
+    }
+
+    fn errorAtFmt(self: *Compiler, token: Token, comptime fmt: []const u8, args: anytype) void {
+        var buf: [256]u8 = undefined;
+        self.errorAt(token, std.fmt.bufPrint(&buf, fmt, args) catch fmt);
     }
 
     fn errorAt(self: *Compiler, token: Token, msg: []const u8) void {
