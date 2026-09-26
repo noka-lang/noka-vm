@@ -101,7 +101,7 @@ pub const Scanner = struct {
             '(' => self.make(.paren_left),
             ')' => self.make(.paren_right),
             '+' => self.make(.plus),
-            '-' => self.make(.minus),
+            '-' => self.make(if (self.match('>')) .case_arrow else .minus),
             '*' => self.make(if (self.match('*')) .star_star else .star),
             '/' => self.make(.slash),
             '%' => self.make(.modulo),
@@ -113,6 +113,8 @@ pub const Scanner = struct {
             ':' => self.make(.colon),
             '#' => self.make(.pound),
             '"', '\'' => self.string(c),
+            ',' => self.make(.comma),
+            '.' => self.make(.dot),
             else => self.errorToken(self.src[self.start..self.current]),
         };
     }
