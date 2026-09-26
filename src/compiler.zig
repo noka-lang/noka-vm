@@ -328,9 +328,9 @@ pub const Compiler = struct {
             if (self.match(.underscore)) {
                 self.consume(.case_arrow, "expected '->' after '_'");
                 self.expression();
-                self.consume(.newline, "expected end of branch");
+                self.endBranch();
                 catch_all = true;
-                if (!self.check(.end)) self.errorAtCurrent("'_' must be the last branch");
+                if (!self.check(.end) and !self.check(.eof)) self.errorAtCurrent("'_' must be the last branch");
                 break;
             }
 
@@ -385,7 +385,7 @@ pub const Compiler = struct {
             if (guard_fail) |j| self.patchJump(j);
             self.emitOp(.pop);
 
-            self.consume(.newline, "expected end of case branch");
+            self.endBranch();
         }
 
         self.consume(.end, "expected 'end' to close 'case'");
@@ -480,6 +480,11 @@ pub const Compiler = struct {
 
     fn dot(self: *Compiler) void {
         self.unsupported();
+    }
+
+    fn endBranch(self: *Compiler) void {
+        if (self.check(.eof)) return;
+        self.consume(.newline, "expected end of case branch");
     }
 
     fn fallback(self: *Compiler) void {
