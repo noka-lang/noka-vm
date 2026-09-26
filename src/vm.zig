@@ -680,7 +680,7 @@ test "single-pattern case expression" {
     try expectFailure("case\n  > 5 -> \"x\"\nend", "compile error at '>': no left-hand side to compare against.");
 }
 
-test "mutli-pattern case expression" {
+test "multi-pattern case expression" {
     try expectOutput("case \"north\"\n  \"up\", \"north\" -> \"go north\"\n  _ -> \"?\"\nend", "go north");
     try expectOutput("case 3\n  1, 2 -> \"low\"\n  3, 4 -> \"high\"\nend", "high");
 }

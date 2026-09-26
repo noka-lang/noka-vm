@@ -839,8 +839,7 @@ pub const Compiler = struct {
     }
 
     fn errorAtPreviousFmt(self: *Compiler, comptime fmt: []const u8, args: anytype) void {
-        var buf: [256]u8 = undefined;
-        self.errorAt(self.previous, std.fmt.bufPrint(&buf, fmt, args) catch fmt);
+        self.errorAtFmt(self.previous, fmt, args);
     }
 
     fn errorAtFmt(self: *Compiler, token: Token, comptime fmt: []const u8, args: anytype) void {
