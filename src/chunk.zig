@@ -53,6 +53,7 @@ pub const OpCode = enum(u8) {
 pub const Chunk = struct {
     pub const code_max = 1 << 16; // 64 KiB of bytecode
     pub const const_max = 1 << 12; // 4096 constant slots
+    pub const stack_max = 256;
 
     code: [code_max]u8 = undefined,
     code_count: usize = 0,

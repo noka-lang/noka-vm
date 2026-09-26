@@ -116,12 +116,10 @@ fn findGlobal(name: *const strings.String) ?*Global {
 
 // ---- VM ----------------------------------------------------------------------------------------
 
-const stack_max = 256;
-
 const VM = struct {
     chunk: *const Chunk,
     ip: usize = 0,
-    stack: [stack_max]Value = undefined,
+    stack: [Chunk.stack_max]Value = undefined,
     sp: usize = 0,
 
     fn push(self: *VM, value: Value) void {
@@ -728,6 +726,29 @@ test "interpretSource returns nonzero on failure" {
     defer io.endCapture();
     try testing.expectEqual(@as(i32, 0), interpretSource("1 + 1"));
     try testing.expectEqual(@as(i32, 1), interpretSource("1 +"));
+}
+
+test "exceeding local and stack limits are compile errors" {
+    var buf: [8192]u8 = undefined;
+
+    // 255 locals: ok
+    var w: std.Io.Writer = .fixed(&buf);
+    try w.writeAll("do\n");
+    for (0..255) |i| try w.print("  v{d} : {d}\n", .{ i, i });
+    try w.writeAll("  v254\nend");
+    try expectOutput(w.buffered(), "254");
+
+    w = .fixed(&buf);
+    try w.writeAll("do\n");
+    for (0..256) |i| try w.print("  v{d} : {d}\n", .{ i, i });
+    try w.writeAll("end");
+    try expectFailure(w.buffered(), "compile error at 'v255': too many locals in scope.");
+
+    w = .fixed(&buf);
+    for (0..300) |_| try w.writeAll("1 + (");
+    try w.writeAll("1");
+    for (0..300) |_| try w.writeAll(")");
+    try expectFailure(w.buffered(), "compile error at '1': expression too deep.");
 }
 
 // ---- Disc tests --------------------------------------------------------------------------------

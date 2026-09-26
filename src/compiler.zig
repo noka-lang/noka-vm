@@ -122,7 +122,7 @@ pub const Compiler = struct {
             }
         }
 
-        if (self.local_count == self.locals.len) {
+        if (self.local_count == std.math.maxInt(u8)) {
             self.errorAt(name, "too many locals in scope");
             return;
         }
@@ -452,6 +452,11 @@ pub const Compiler = struct {
     fn declareSynthetic(self: *Compiler) u8 {
         if (self.had_error) return 0;
 
+        if (self.local_count == std.math.maxInt(u8)) {
+            self.errorAtPrevious("too many locals in scope");
+            return 0;
+        }
+
         const slot: u8 = @intCast(self.stack_height - 1);
         self.locals[self.local_count] = .{
             .name = .{ .type = .underscore, .lexeme = "", .line = 0 },
@@ -747,6 +752,8 @@ pub const Compiler = struct {
     fn emitOp(self: *Compiler, op: OpCode) void {
         self.chunk.writeOp(op);
         self.stack_height += stackEffect(op);
+
+        if (self.stack_height > Chunk.stack_max) self.errorAtPrevious("expression too deep");
     }
 
     fn emitOpByte(self: *Compiler, op: OpCode, byte: u8) void {
