@@ -405,7 +405,7 @@ const VM = struct {
                     return true;
                 },
                 _ => {
-                    io.printf("runtime error: unknown opcode {s}.\n", .{@tagName(op)});
+                    io.printf("runtime error: unknown opcode {d}.\n", .{@intFromEnum(op)});
                     return false;
                 },
             }
