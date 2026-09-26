@@ -450,6 +450,8 @@ pub const Compiler = struct {
 
     /// Reserve whatever is on top of the stack as an unnamed local. Returns its slot.
     fn declareSynthetic(self: *Compiler) u8 {
+        if (self.had_error) return 0;
+
         const slot: u8 = @intCast(self.stack_height - 1);
         self.locals[self.local_count] = .{
             .name = .{ .type = .underscore, .lexeme = "", .line = 0 },

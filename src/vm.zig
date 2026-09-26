@@ -700,6 +700,10 @@ test "case bodies can assign" {
     try expectOutput("x : 0\ncase 2\n  2 -> x = 7\nend\nx", "7");
 }
 
+test "a broken case subject is a compile error" {
+    try expectFailure("case )\n  1 -> 2\nend", "compile error at ')': expected expression.");
+}
+
 test "newlines around a lone expression are dropped" {
     try expectOutput("1 + 2\n", "3");
     try expectOutput("\n\n1 + 2", "3");
