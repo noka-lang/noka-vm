@@ -30,6 +30,7 @@ pub fn disassembleInstruction(chunk: *const Chunk, offset: usize) usize {
         .bnot => simpleInstruction("OP_BNOT", offset),
         .bor => simpleInstruction("OP_BOR", offset),
         .bxor => simpleInstruction("OP_BXOR", offset),
+        .collapse => byteInstruction("OP_COLLAPSE", chunk, offset),
         .constant => constantInstruction("OP_CONSTANT", chunk, offset),
         .define_const => constantInstruction("OP_DEFINE_CONST", chunk, offset),
         .define_global => constantInstruction("OP_DEFINE_GLOBAL", chunk, offset),
@@ -38,6 +39,7 @@ pub fn disassembleInstruction(chunk: *const Chunk, offset: usize) usize {
         .exponent => simpleInstruction("OP_EXPONENT", offset),
         .false => simpleInstruction("OP_FALSE", offset),
         .get_global => constantInstruction("OP_GET_GLOBAL", chunk, offset),
+        .get_local => byteInstruction("OP_LOCAL", chunk, offset),
         .greater => simpleInstruction("OP_GREATER", offset),
         .in => simpleInstruction("OP_IN", offset),
         .jump => jumpInstruction("OP_JUMP", 1, chunk, offset),
@@ -53,6 +55,7 @@ pub fn disassembleInstruction(chunk: *const Chunk, offset: usize) usize {
         .print => simpleInstruction("OP_PRINT", offset),
         .@"return" => simpleInstruction("OP_RETURN", offset),
         .set_global => constantInstruction("OP_SET_GLOBAL", chunk, offset),
+        .set_local => byteInstruction("OP_SET_LOCAL", chunk, offset),
         .shift_left => simpleInstruction("OP_SHIFT_LEFT", offset),
         .shift_right => simpleInstruction("OP_SHIFT_RIGHT", offset),
         .subtract => simpleInstruction("OP_SUBTRACT", offset),
@@ -62,6 +65,11 @@ pub fn disassembleInstruction(chunk: *const Chunk, offset: usize) usize {
             break :blk offset + 1;
         },
     };
+}
+
+fn byteInstruction(name: []const u8, chunk: *const Chunk, offset: usize) usize {
+    io.printf("{s} {d}\n", .{ name, chunk.code[offset + 1] });
+    return offset + 2;
 }
 
 fn jumpInstruction(name: []const u8, sign: i2, chunk: *const Chunk, offset: usize) usize {

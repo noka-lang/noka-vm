@@ -44,12 +44,23 @@ pub const Compiler = struct {
     had_error: bool = false,
     panic_mode: bool = false,
     can_assign: bool = false,
+    locals: [256]Local = undefined,
+    local_count: u8 = 0,
+    scope_depth: u8 = 0,
+    stack_height: i16 = 0,
 
     const ParseFn = *const fn (*Compiler) void;
     const ParseRule = struct {
         prefix: ?ParseFn = null,
         infix: ?ParseFn = null,
         precedence: Precedence = .none,
+    };
+
+    const Local = struct {
+        name: Token,
+        slot: u8,
+        depth: u8,
+        mut: Mutability,
     };
 
     /// Compile `source` into `chunk`. Returns false if there were errors.
@@ -95,19 +106,61 @@ pub const Compiler = struct {
         self.statement();
     }
 
+    fn declareLocal(self: *Compiler, name: Token, mut: Mutability) void {
+        if (self.had_error) return;
+
+        // re-declaring a var in the same scope is an error
+        // shadowing vars from an outer scope is ok
+        var i = self.local_count;
+        while (i > 0 and self.locals[i - 1].depth == self.scope_depth) : (i -= 1) {
+            if (std.mem.eql(u8, self.locals[i - 1].name.lexeme, name.lexeme)) {
+                self.errorAtFmt(name, "'{s}' has already been declared", .{name.lexeme});
+                return;
+            }
+        }
+
+        if (self.local_count == self.locals.len) {
+            self.errorAt(name, "too many locals in scope");
+            return;
+        }
+
+        self.locals[self.local_count] = .{
+            .name = name,
+            .slot = @intCast(self.stack_height - 1),
+            .depth = self.scope_depth,
+            .mut = mut,
+        };
+        self.local_count += 1;
+    }
+
+    fn resolveLocal(self: *Compiler, name: Token) ?Local {
+        var i = self.local_count;
+        while (i > 0) {
+            i -= 1;
+            if (std.mem.eql(u8, self.locals[i].name.lexeme, name.lexeme)) return self.locals[i];
+        }
+
+        return null;
+    }
+
     fn binding(self: *Compiler, mut: Mutability) void {
-        // name is in `previous` and `:` or `#` is in `current`.
-        // advnace to ge the initializer value (mandatory)
-        const global = self.identifierConstant(self.previous);
-        self.advance();
+        const name = self.previous;
+        self.advance(); // consume ':' or '#'
 
-        self.expression();
-        self.endStatement();
+        if (self.scope_depth == 0) {
+            const global = self.identifierConstant(name);
+            self.expression();
+            self.endStatement();
 
-        if (global) |slot| self.emitOpWithIndex(switch (mut) {
-            .mutable => .define_global,
-            .constant => .define_const,
-        }, slot);
+            if (global) |slot| self.emitOpWithIndex(switch (mut) {
+                .mutable => .define_global,
+                .constant => .define_const,
+            }, slot);
+        } else {
+            self.expression();
+            self.endStatement();
+            self.declareLocal(name, mut);
+        }
 
         self.emitOp(.nil);
     }
@@ -122,6 +175,25 @@ pub const Compiler = struct {
         if (self.check(.eof)) return;
 
         self.errorAtCurrent("expected end of statement");
+    }
+
+    fn localsAboveDepth(self: *Compiler, depth: u8) u8 {
+        var n: u8 = 0;
+        var i = self.local_count;
+        while (i > 0 and self.locals[i - 1].depth >= depth) : (i -= 1) n += 1;
+
+        return n;
+    }
+
+    fn beginScope(self: *Compiler) void {
+        self.scope_depth += 1;
+    }
+
+    fn endScope(self: *Compiler) void {
+        const n = self.localsAboveDepth(self.scope_depth);
+        self.scope_depth -= 1;
+        self.local_count -= n;
+        if (n > 0) self.emitOpByte(.collapse, n);
     }
 
     fn expressionStatement(self: *Compiler) void {
@@ -222,7 +294,16 @@ pub const Compiler = struct {
     }
 
     fn blockExpr(self: *Compiler) void {
-        _ = self;
+        if (self.match(.end)) {
+            self.emitOp(.nil);
+            return;
+        }
+
+        self.consume(.newline, "expected newline after 'do'");
+        self.beginScope();
+        self.block(.end);
+        self.consume(.end, "expected 'end' to close 'do'");
+        self.endScope();
     }
 
     fn call(self: *Compiler) void {
@@ -384,7 +465,28 @@ pub const Compiler = struct {
     }
 
     fn variable(self: *Compiler) void {
-        const global = self.identifierConstant(self.previous) orelse return;
+        const name = self.previous;
+
+        if (self.resolveLocal(name)) |local| {
+            const slot = local.slot;
+            const mut = local.mut;
+
+            if (self.can_assign and self.match(.equal)) {
+                if (mut == .constant) {
+                    self.errorAtFmt(name, "'{s}' is constant and cannot be reassigned", .{name.lexeme});
+                    return;
+                }
+
+                self.expression();
+                self.emitOpByte(.set_local, slot);
+                return;
+            }
+
+            self.emitOpByte(.get_local, slot);
+            return;
+        }
+
+        const global = self.identifierConstant(name) orelse return;
 
         if (self.can_assign and self.match(.equal)) {
             self.expression();
@@ -494,6 +596,13 @@ pub const Compiler = struct {
 
     fn emitOp(self: *Compiler, op: OpCode) void {
         self.chunk.writeOp(op);
+        self.stack_height += stackEffect(op);
+    }
+
+    fn emitOpByte(self: *Compiler, op: OpCode, byte: u8) void {
+        self.emitOp(op);
+        self.emitByte(byte);
+        if (op == .collapse) self.stack_height -= byte;
     }
 
     fn emitByte(self: *Compiler, byte: u8) void {
@@ -573,3 +682,15 @@ pub const Compiler = struct {
         }
     }
 };
+
+fn stackEffect(op: OpCode) i8 {
+    return switch (op) {
+        .constant, .nil, .true, .false, .get_global, .get_local => 1, // push one
+        .pop, .print, .define_global, .define_const => -1, // pop one
+        .equal, .greater, .less, .add, .subtract, .multiply, .divide, .modulo, .exponent, .in, .band, .bor, .bxor, .shift_left, .shift_right => -1, // pop two, push one
+        .not, .negate, .bnot => 0, // pop one, push one
+        .set_global, .set_local, .jump, .jump_if_false, .jump_if_not_nil => 0, // peek
+        .collapse => 0, // operand-dependent
+        .@"return", _ => 0,
+    };
+}

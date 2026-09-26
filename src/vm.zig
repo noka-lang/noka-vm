@@ -373,6 +373,20 @@ const VM = struct {
 
                     global.value = self.peek(0);
                 },
+                // TODO: replace absolute indices with frame-relative ones
+                .get_local => {
+                    const slot = self.readByte();
+                    self.push(self.stack[slot]);
+                },
+                .set_local => {
+                    const slot = self.readByte();
+                    self.stack[slot] = self.peek(0);
+                },
+                .collapse => {
+                    const n = self.readByte();
+                    self.stack[self.sp - 1 - n] = self.stack[self.sp - 1];
+                    self.sp -= n;
+                },
                 .@"return" => {
                     // Temporary: print the result of the top-level expression.
                     // TODO: real `return` belongs to function calls; a top-level program should
@@ -539,6 +553,17 @@ test "unary minus" {
     try expectOutput("-5", "-5");
     try expectOutput("--5", "5");
     try expectOutput("-2 * 3", "-6");
+}
+
+test "blocks and locals" {
+    try expectOutput("do\n  a : 2\n a * 3\nend", "6");
+    try expectOutput("x : do\n  a : 2\n  b : 3\n  a + b\nend\nx", "5");
+    try expectOutput("do end", "nil");
+    try expectOutput("a : 1\ndo\n  a : 2\n  a\nend", "2"); // shadowing
+    try expectOutput("a : 1\ndo\n  a : 2\nend\na", "1");
+    try expectOutput("1 + do\n  a : 2\n  a\nend", "3");
+    try expectOutput("do\n  a : 1\n  a = 2\n  a\nend", "2");
+    try expectFailure("do\n  a : 1\n  a : 2\nend", "compile error at 'a': 'a' has already been declared.");
 }
 
 test "strings" {
