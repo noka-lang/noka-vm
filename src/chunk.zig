@@ -44,6 +44,7 @@ pub const OpCode = enum(u8) {
     get_local,
     set_local,
     collapse,
+    loop,
     print,
     @"return",
     _,

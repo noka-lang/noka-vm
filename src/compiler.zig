@@ -841,7 +841,7 @@ fn stackEffect(op: OpCode) i8 {
         .pop, .print, .define_global, .define_const => -1, // pop one
         .equal, .greater, .less, .add, .subtract, .multiply, .divide, .modulo, .exponent, .in, .band, .bor, .bxor, .shift_left, .shift_right => -1, // pop two, push one
         .not, .negate, .bnot => 0, // pop one, push one
-        .set_global, .set_local, .jump, .jump_if_false, .jump_if_not_nil, .jump_if_true => 0, // peek
+        .set_global, .set_local, .jump, .jump_if_false, .jump_if_not_nil, .jump_if_true, .loop => 0, // peek
         .collapse => 0, // operand-dependent
         .@"return", _ => 0,
     };
