@@ -322,8 +322,11 @@ pub const Compiler = struct {
         var ends: [case_branch_max]usize = undefined;
         var end_count: usize = 0;
         var catch_all = false;
+        const base = self.stack_height;
 
         while (!self.check(.end) and !self.check(.eof)) {
+            self.expectHeight(base);
+
             // `_` catch-all
             if (self.match(.underscore)) {
                 self.consume(.case_arrow, "expected '->' after '_'");
@@ -391,6 +394,7 @@ pub const Compiler = struct {
         self.consume(.end, "expected 'end' to close 'case'");
 
         if (!catch_all) self.emitOp(.nil);
+        self.expectHeight(base + 1);
 
         // end
         for (ends[0..end_count]) |j| self.patchJump(j);
@@ -439,6 +443,8 @@ pub const Compiler = struct {
     // `case <cond> -> <body>`
     // The condition is already on the stack.
     fn caseSingle(self: *Compiler) void {
+        const base = self.stack_height;
+
         self.consume(.case_arrow, "expected '->' after case condition");
 
         const miss = self.emitJump(.jump_if_false);
@@ -451,6 +457,7 @@ pub const Compiler = struct {
         self.emitOp(.nil);
 
         self.patchJump(end);
+        self.expectHeight(base);
     }
 
     /// Reserve whatever is on top of the stack as an unnamed local. Returns its slot.
