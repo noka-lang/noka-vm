@@ -48,6 +48,7 @@ pub const Compiler = struct {
     local_count: u8 = 0,
     scope_depth: u8 = 0,
     stack_height: i16 = 0,
+    loop: ?*Loop = null,
 
     const ParseFn = *const fn (*Compiler) void;
     const ParseRule = struct {
@@ -62,6 +63,16 @@ pub const Compiler = struct {
         depth: u8,
         mut: Mutability,
     };
+
+    const Loop = struct {
+        enclosing: ?*Loop,
+        start: usize,
+        base: i16,
+        stops: [loop_stop_max]usize = undefined,
+        stop_count: usize = 0,
+    };
+
+    const loop_stop_max = 16;
 
     const case_branch_max = 32;
     const case_pattern_max = 16;
@@ -670,7 +681,32 @@ pub const Compiler = struct {
     }
 
     fn whileExpr(self: *Compiler) void {
-        self.unsupported();
+        self.emitOp(.nil);
+
+        const loop_start = self.chunk.code_count;
+        var loop = Loop{ .enclosing = self.loop, .start = loop_start, .base = self.stack_height };
+        self.loop = &loop;
+        defer self.loop = loop.enclosing;
+
+        self.expression();
+        const cond_height = self.stack_height;
+        const exit = self.emitJump(.jump_if_false);
+        self.emitOp(.pop);
+
+        self.consume(.newline, "expected newline after 'while' condition");
+        self.beginScope();
+        self.block(.end);
+        self.consume(.end, "expected 'end' to close 'while'");
+        self.endScope();
+        self.emitOpByte(.collapse, 1);
+        self.emitLoop(loop_start);
+
+        self.stack_height = cond_height;
+        self.patchJump(exit);
+        self.emitOp(.pop);
+
+        for (loop.stops[0..loop.stop_count]) |j| self.patchJump(j);
+        self.expectHeight(loop.base);
     }
 
     fn getRule(t: TokenType) ParseRule {

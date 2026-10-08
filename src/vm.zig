@@ -755,7 +755,7 @@ test "exceeding local and stack limits are compile errors" {
 }
 
 test "unimplemented syntax is a compile error" {
-    try expectFailure("1 + while", "compile error at 'while': not supported (yet).");
+    try expectFailure("1 + for", "compile error at 'for': not supported (yet).");
     try expectFailure("x : fn", "compile error at 'fn': not supported (yet).");
     try expectFailure("this", "compile error at 'this': not supported (yet).");
     try expectFailure("x : 1\nx.y", "compile error at '.': not supported (yet).");
@@ -785,6 +785,16 @@ test "case structure" {
     try expectFailure("case 1\n  _ -> 1\n  2 -> 3\nend", "compile error at '2': '_' must be the last branch.");
     try expectFailure("case 1\n  1 -> 2\n", "compile error at end: expected 'end' to close 'case'.");
     try expectFailure("case 1\n  _ -> 2\n", "compile error at end: expected 'end' to close 'case'.");
+}
+
+test "while loops" {
+    try expectOutput("i : 0\nwhile i < 3\n  i = i + 1\nend", "3");
+    try expectOutput("while false\n  1\nend", "nil");
+    try expectOutput("x : while false\n  1\nend\nx", "nil");
+    try expectOutput("i : 0\nwhile i < 3\n  j : i * 2\n  i = i + 1\n  j\nend", "4");
+    try expectFailure("while 1\n  2\nend", "runtime error: condition expected boolean, got number.");
+    try expectFailure("while true 1 end", "compile error at '1': expected newline after 'while' condition.");
+    try expectFailure("while true\n  1\n", "compile error at end: expected 'end' to close 'while'.");
 }
 
 // ---- Disc tests --------------------------------------------------------------------------------
