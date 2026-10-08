@@ -22,7 +22,7 @@ jobs:
         uses: mlugg/setup-zig@v2
         with:
           # Keep in sync with `minimum_zig_version` in build.zig.zon.
-          version: 0.16.0
+          version: 0.17.0
 
       - name: Run tests
         run: zig build test
