@@ -797,6 +797,26 @@ test "while loops" {
     try expectFailure("while true\n  1\n", "compile error at end: expected 'end' to close 'while'.");
 }
 
+test "stop statement" {
+    try expectOutput("i : 0\nwhile true\n  i = i + 1\n  case i == 5 -> stop i * 10\nend", "50");
+    try expectOutput("while true\n  stop\nend", "nil");
+    try expectOutput("while true\n  do\n    a : 7\n    case a > 5 -> stop a\n  end\nend", "7");
+    try expectOutput("i : 0\nwhile true\n  i = i + 1\n  x : 100 + case i\n    3 -> stop i\n    _ -> 0\n  end\nend", "3");
+    try expectFailure("stop", "compile error at 'stop': 'stop' outside of a loop.");
+    try expectFailure("1 + stop", "compile error at 'stop': expected expression.");
+}
+
+test "next statement" {
+    try expectOutput("i : 0\ntotal : 0\nwhile i < 6\n  i = i + 1\n  case i % 2 == 0 -> next\n  total = total + i\nend", "9");
+    try expectOutput("i : 0\nwhile i < 3\n  i = i + 1\n  a : i\n  case true -> next\nend", "nil");
+    try expectFailure("next", "compile error at 'next': 'next' outside of a loop.");
+}
+
+test "nested loops" {
+    try expectOutput("count : 0\ni : 0\nwhile i < 3\n  i = i + 1\n  j : 0\n  while true\n    j = j + 1\n    count = count + 1\n    case j == 2 -> stop\n  end\nend\ncount", "6");
+    try expectOutput("i : 0\nwhile i < 3\n  i = i + 1\n  while true\n    stop i\n  end\nend", "3");
+}
+
 // ---- Disc tests --------------------------------------------------------------------------------
 
 test "eval rejects a length past the disc size" {

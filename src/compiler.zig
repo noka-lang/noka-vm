@@ -181,7 +181,42 @@ pub const Compiler = struct {
 
     fn statement(self: *Compiler) void {
         // TODO: fn, print, for, if, while, block
-        self.expressionStatement();
+        self.branchBody();
+        self.endStatement();
+    }
+
+    fn branchBody(self: *Compiler) void {
+        if (self.match(.stop)) return self.stopStatement();
+        if (self.match(.next)) return self.nextStatement();
+        self.expression();
+    }
+
+    fn stopStatement(self: *Compiler) void {
+        const loop = self.loop orelse return self.errorAtPrevious("'stop' outside of a loop");
+        if (self.had_error) return;
+        const entry = self.stack_height;
+
+        if (self.check(.newline) or self.check(.eof)) self.emitOp(.nil) else self.expression();
+
+        self.emitOpByte(.collapse, @intCast(self.stack_height - loop.base));
+
+        if (loop.stop_count == loop.stops.len) return self.errorAtPrevious("too many 'stop's in one loop");
+        loop.stops[loop.stop_count] = self.emitJump(.jump);
+        loop.stop_count += 1;
+
+        self.stack_height = entry + 1;
+    }
+
+    fn nextStatement(self: *Compiler) void {
+        const loop = self.loop orelse return self.errorAtPrevious("'next' outside of a loop");
+        if (self.had_error) return;
+        const entry = self.stack_height;
+
+        var n = self.stack_height - loop.base;
+        while (n > 0) : (n -= 1) self.emitOp(.pop);
+        self.emitLoop(loop.start);
+
+        self.stack_height = entry + 1;
     }
 
     fn endStatement(self: *Compiler) void {
@@ -341,7 +376,7 @@ pub const Compiler = struct {
             // `_` catch-all
             if (self.match(.underscore)) {
                 self.consume(.case_arrow, "expected '->' after '_'");
-                self.expression();
+                self.branchBody();
                 self.endBranch();
                 catch_all = true;
                 if (!self.check(.end) and !self.check(.eof)) self.errorAtCurrent("'_' must be the last branch");
@@ -385,7 +420,7 @@ pub const Compiler = struct {
 
             // body
             self.consume(.case_arrow, "expected '->' after case pattern");
-            self.expression();
+            self.branchBody();
 
             if (end_count == ends.len) {
                 self.errorAtCurrent("too many case branches");
@@ -460,7 +495,7 @@ pub const Compiler = struct {
 
         const miss = self.emitJump(.jump_if_false);
         self.emitOp(.pop);
-        self.expression();
+        self.branchBody();
         const end = self.emitJump(.jump);
 
         self.patchJump(miss);
