@@ -799,6 +799,16 @@ pub const Compiler = struct {
         self.emitByte(@intCast(slot & 0xff));
     }
 
+    fn emitLoop(self: *Compiler, start: usize) void {
+        self.emitOp(.loop);
+
+        const offset = self.chunk.code_count - start + 2;
+        if (offset > 0xffff) self.errorAtPrevious("loop body too large");
+
+        self.emitByte(@truncate(offset >> 8));
+        self.emitByte(@truncate(offset));
+    }
+
     fn emitJump(self: *Compiler, op: OpCode) usize {
         self.emitOp(op);
         self.emitByte(0xff);

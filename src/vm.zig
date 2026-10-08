@@ -388,7 +388,10 @@ const VM = struct {
                     const slot = self.readByte();
                     self.stack[slot] = self.peek(0);
                 },
-                .loop => unreachable,
+                .loop => {
+                    const offset = self.readShort();
+                    self.ip -= offset;
+                },
                 .collapse => {
                     const n = self.readByte();
                     self.stack[self.sp - 1 - n] = self.stack[self.sp - 1];
