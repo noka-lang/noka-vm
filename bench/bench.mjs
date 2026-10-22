@@ -10,6 +10,10 @@
 // Results go to bench/results.json (not committed). Each program and target is compared against
 // bench/baseline.json (committed) by its fastest run. More than 10% slower fails the step.
 //
+// Each program also has a Lua twin in bench/lua/ that prints the same value. When Lua 5.4 is
+// installed, the twin is timed (minus Lua's startup) and every program must stay within 3x of it
+// natively and 4x as wasm. Without Lua 5.4 the ratio check is skipped with a warning.
+//
 //     zig build bench                  run and compare
 //     zig build bench -- --update      run and rewrite the baseline
 //     zig build bench -- --only NAME   run one program
@@ -26,6 +30,8 @@ const programsDir = join(here, 'programs');
 const baselinePath = join(here, 'baseline.json');
 const resultsPath = join(here, 'results.json');
 const threshold = 1.10;
+const luaDir = join(here, 'lua');
+const luaBar = { native: 3, wasm: 4 }; // max slowdown against Lua 5.4, per target
 let midLine = false; // a progress line is waiting for its " done"
 
 const args = parseArgs(process.argv.slice(2));
@@ -33,6 +39,9 @@ const programs = loadPrograms().filter((p) => !args.only || p.name === args.only
 if (programs.length === 0) fail(`no programs found${args.only ? ` named ${args.only}` : ''}`);
 
 const wasm = await loadWasm(args.wasm);
+const lua = findLua54();
+if (!lua) console.log('warning: Lua 5.4 not found, skipping the Lua ratio check (brew install lua@5.4)\n');
+const luaStartupNs = lua ? measureLuaStartup() : 0;
 const results = {
   machine: machineName(),
   date: new Date().toISOString(),
@@ -47,6 +56,7 @@ for (const program of programs) {
     iterations: program.iterations,
     native: timeNative(program),
     wasm: timeWasm(program),
+    lua: lua ? timeLua(program) : null,
   };
   process.stderr.write(' done\n');
   midLine = false;
@@ -54,19 +64,22 @@ for (const program of programs) {
 
 writeFileSync(resultsPath, JSON.stringify(results, null, 2) + '\n');
 
+let baseline = null;
 if (args.update) {
   writeFileSync(baselinePath, JSON.stringify(results, null, 2) + '\n');
-  printTable(results, null);
-  console.log(`\nbaseline written to ${baselinePath}`);
-  process.exit(0);
+} else if (existsSync(baselinePath)) {
+  baseline = JSON.parse(readFileSync(baselinePath, 'utf8'));
+  if (baseline.machine !== results.machine) {
+    console.log(`warning: baseline was recorded on "${baseline.machine}", this is "${results.machine}". Comparisons are unreliable.\n`);
+  }
 }
 
-const baseline = existsSync(baselinePath) ? JSON.parse(readFileSync(baselinePath, 'utf8')) : null;
-if (baseline && baseline.machine !== results.machine) {
-  console.log(`warning: baseline was recorded on "${baseline.machine}", this is "${results.machine}". Comparisons are unreliable.\n`);
-}
-const regressions = printTable(results, baseline);
-if (regressions > 0) fail(`${regressions} benchmark(s) more than ${Math.round((threshold - 1) * 100)}% slower than the baseline`);
+const { regressions, overBar } = printTable(results, baseline);
+if (args.update) console.log(`\nbaseline written to ${baselinePath}`);
+const failures = [];
+if (regressions > 0) failures.push(`${regressions} benchmark(s) more than ${Math.round((threshold - 1) * 100)}% slower than the baseline`);
+if (overBar > 0) failures.push(`${overBar} benchmark(s) over the Lua bar (${luaBar.native}x native, ${luaBar.wasm}x wasm)`);
+if (failures.length > 0) fail(failures.join('; '));
 
 // ---- programs ----------------------------------------------------------------------------------
 
@@ -153,6 +166,45 @@ function timeWasm(program) {
   return withPerIteration({ min_ns: samples[0], median_ns: samples[Math.floor(args.runs / 2)] }, program);
 }
 
+// ---- lua ---------------------------------------------------------------------------------------
+
+function findLua54() {
+  const candidates = ['lua5.4', 'lua54', 'lua', '/opt/homebrew/opt/lua@5.4/bin/lua', '/usr/local/opt/lua@5.4/bin/lua'];
+  for (const cmd of candidates) {
+    const r = spawnSync(cmd, ['-v'], { encoding: 'utf8' });
+    if (r.status === 0 && /^Lua 5\.4\./.test((r.stdout || r.stderr).trim())) return cmd;
+  }
+  return null;
+}
+
+function measureLuaStartup() {
+  let best = Infinity;
+  for (let i = 0; i < 5; i++) {
+    const start = process.hrtime.bigint();
+    spawnSync(lua, ['-e', '']);
+    best = Math.min(best, Number(process.hrtime.bigint() - start));
+  }
+  return best;
+}
+
+function timeLua(program) {
+  const twin = join(luaDir, `${program.name}.lua`);
+  if (!existsSync(twin)) fail(`${program.name} has no Lua twin at bench/lua/${program.name}.lua`);
+
+  const check = spawnSync(lua, [twin], { encoding: 'utf8' });
+  if (check.status !== 0) fail(`${program.name} (lua) failed:\n${check.stderr}`);
+  expectOutput(program, 'lua', check.stdout);
+
+  const samples = [];
+  for (let i = 0; i < args.runs; i++) {
+    const start = process.hrtime.bigint();
+    spawnSync(lua, [twin]);
+    samples.push(Math.max(1, Number(process.hrtime.bigint() - start) - luaStartupNs));
+  }
+  samples.sort((a, b) => a - b);
+  return withPerIteration({ min_ns: samples[0], median_ns: samples[Math.floor(args.runs / 2)] }, program);
+}
+
 // ---- reporting ---------------------------------------------------------------------------------
 
 function expectOutput(program, target, output) {
@@ -167,7 +219,8 @@ function withPerIteration(timing, program) {
 
 function printTable(current, base) {
   let regressions = 0;
-  const rows = [['program', 'target', 'min ms', 'ns/iter', 'baseline ms', 'change']];
+  let overBar = 0;
+  const rows = [['program', 'target', 'min ms', 'ns/iter', 'baseline ms', 'change', 'vs lua']];
   for (const [name, r] of Object.entries(current.results)) {
     for (const target of ['native', 'wasm']) {
       const t = r[target];
@@ -183,6 +236,15 @@ function printTable(current, base) {
       } else if (base) {
         change = 'new';
       }
+      let vsLua = '';
+      if (r.lua) {
+        const ratio = t.min_ns / r.lua.min_ns;
+        vsLua = `${round(ratio, 1)}x`;
+        if (ratio > luaBar[target]) {
+          vsLua += '  OVER';
+          overBar++;
+        }
+      }
       rows.push([
         name,
         target,
@@ -190,12 +252,13 @@ function printTable(current, base) {
         t.ns_per_iteration?.toString() ?? '',
         b ? round(b.min_ns / 1e6, 2).toString() : '',
         change,
+        vsLua,
       ]);
     }
   }
   const widths = rows[0].map((_, c) => Math.max(...rows.map((row) => row[c].length)));
   for (const row of rows) console.log(row.map((cell, c) => cell.padEnd(widths[c])).join('  ').trimEnd());
-  return regressions;
+  return { regressions, overBar };
 }
 
 // ---- helpers -----------------------------------------------------------------------------------
