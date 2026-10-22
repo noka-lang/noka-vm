@@ -12,55 +12,86 @@ pub const String = struct {
     hash: u32,
 };
 
-var arena: [bytes_max]u8 = undefined;
-var arena_used: usize = 0;
+pub const Strings = struct {
+    arena: [bytes_max]u8 = undefined,
+    arena_used: usize = 0,
+    pool: [table_max]String = undefined,
+    pool_count: usize = 0,
+    table: [table_max]?u16 = @splat(null),
 
-var pool: [table_max]String = undefined;
-var pool_count: usize = 0;
+    pub fn reset(self: *Strings) void {
+        self.arena_used = 0;
+        self.pool_count = 0;
+        self.table = @splat(null);
+    }
 
-var table: [table_max]?u16 = @splat(null);
+    pub fn intern(self: *Strings, text: []const u8) ?*const String {
+        const h = std.hash.Fnv1a_32.hash(text);
+        if (self.find(text, h)) |existing| return existing;
 
-pub fn reset() void {
-    arena_used = 0;
-    pool_count = 0;
-    table = @splat(null);
-}
+        const start = self.arena_used;
+        if (start + text.len > self.arena.len) return null;
+        @memcpy(self.arena[start..][0..text.len], text);
+        self.arena_used += text.len;
 
-pub fn intern(text: []const u8) ?*const String {
-    const h = std.hash.Fnv1a_32.hash(text);
-    if (find(text, h)) |existing| return existing;
+        return self.insert(self.arena[start..self.arena_used], h) orelse {
+            self.arena_used = start;
+            return null;
+        };
+    }
 
-    const start = arena_used;
-    if (start + text.len > arena.len) return null;
-    @memcpy(arena[start..][0..text.len], text);
-    arena_used += text.len;
+    pub fn build(self: *Strings) Builder {
+        return .{ .strings = self, .start = self.arena_used };
+    }
 
-    return insert(arena[start..arena_used], h) orelse {
-        arena_used = start;
+    fn find(self: *const Strings, text: []const u8, h: u32) ?*const String {
+        var i: usize = @as(usize, h) & (table_max - 1);
+        while (self.table[i]) |idx| : (i = (i + 1) & (table_max - 1)) {
+            const s = &self.pool[idx];
+            if (s.hash == h and std.mem.eql(u8, s.bytes, text)) return s;
+        }
+
         return null;
-    };
-}
+    }
+
+    fn insert(self: *Strings, text: []const u8, h: u32) ?*const String {
+        if (self.pool_count >= load_max) return null;
+
+        const idx: u16 = @intCast(self.pool_count);
+        self.pool[idx] = .{ .bytes = text, .hash = h };
+        self.pool_count += 1;
+
+        var i: usize = @as(usize, h) & (table_max - 1);
+        while (self.table[i] != null) : (i = (i + 1) & (table_max - 1)) {}
+        self.table[i] = idx;
+
+        return &self.pool[idx];
+    }
+};
 
 pub const Builder = struct {
+    strings: *Strings,
     start: usize,
     overflow: bool = false,
 
     pub fn push(self: *Builder, byte: u8) void {
-        if (arena_used + 1 > arena.len) {
+        const s = self.strings;
+        if (s.arena_used + 1 > s.arena.len) {
             self.overflow = true;
             return;
         }
-        arena[arena_used] = byte;
-        arena_used += 1;
+        s.arena[s.arena_used] = byte;
+        s.arena_used += 1;
     }
 
     pub fn pushSlice(self: *Builder, text: []const u8) void {
-        if (arena_used + text.len > arena.len) {
+        const s = self.strings;
+        if (s.arena_used + text.len > s.arena.len) {
             self.overflow = true;
             return;
         }
-        @memcpy(arena[arena_used..][0..text.len], text);
-        arena_used += text.len;
+        @memcpy(s.arena[s.arena_used..][0..text.len], text);
+        s.arena_used += text.len;
     }
 
     pub fn finish(self: *Builder) ?*const String {
@@ -69,48 +100,21 @@ pub const Builder = struct {
             return null;
         }
 
-        const text = arena[self.start..arena_used];
+        const s = self.strings;
+        const text = s.arena[self.start..s.arena_used];
         const h = std.hash.Fnv1a_32.hash(text);
-        if (find(text, h)) |existing| {
+        if (s.find(text, h)) |existing| {
             self.discard();
             return existing;
         }
 
-        return insert(text, h) orelse {
+        return s.insert(text, h) orelse {
             self.discard();
             return null;
         };
     }
 
     pub fn discard(self: *Builder) void {
-        arena_used = self.start;
+        self.strings.arena_used = self.start;
     }
 };
-
-pub fn build() Builder {
-    return .{ .start = arena_used };
-}
-
-fn find(text: []const u8, h: u32) ?*const String {
-    var i: usize = @as(usize, h) & (table_max - 1);
-    while (table[i]) |idx| : (i = (i + 1) & (table_max - 1)) {
-        const s = &pool[idx];
-        if (s.hash == h and std.mem.eql(u8, s.bytes, text)) return s;
-    }
-
-    return null;
-}
-
-fn insert(text: []const u8, h: u32) ?*const String {
-    if (pool_count >= load_max) return null;
-
-    const idx: u16 = @intCast(pool_count);
-    pool[idx] = .{ .bytes = text, .hash = h };
-    pool_count += 1;
-
-    var i: usize = @as(usize, h) & (table_max - 1);
-    while (table[i] != null) : (i = (i + 1) & (table_max - 1)) {}
-    table[i] = idx;
-
-    return &pool[idx];
-}

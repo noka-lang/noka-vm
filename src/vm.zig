@@ -15,6 +15,7 @@ const debug_trace_execution = false;
 var heap_buffer: [1 << 20]u8 = undefined; // 1 MiB
 var fba = std.heap.FixedBufferAllocator.init(&heap_buffer);
 var disc: [64 * 1024]u8 = undefined; // 64 KiB, a disc's worth of source
+var string_table: strings.Strings = .{}; // TODO: move this into Machine (S2)
 
 export fn disc_ptr() [*]u8 {
     return &disc;
@@ -26,7 +27,7 @@ export fn disc_cap() usize {
 
 export fn init() void {
     fba.reset();
-    strings.reset();
+    string_table.reset();
     globals_count = 0;
 }
 
@@ -85,7 +86,7 @@ pub fn interpretDisc(image: []const u8) i32 {
 fn compileAndRun(source: []const u8) i32 {
     chunk = Chunk{};
 
-    if (!Compiler.compile(source, &chunk)) return 1;
+    if (!Compiler.compile(source, &chunk, &string_table)) return 1;
     if (debug_print_bytecode) debug.disassembleChunk(&chunk, "compiled code");
 
     var vm = VM{ .chunk = &chunk };
@@ -206,7 +207,7 @@ const VM = struct {
                     const a = self.pop();
 
                     if (a == .string and b == .string) {
-                        var builder = strings.build();
+                        var builder = string_table.build();
                         builder.pushSlice(a.string.bytes);
                         builder.pushSlice(b.string.bytes);
 

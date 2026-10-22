@@ -39,6 +39,7 @@ pub const Mutability = enum { mutable, constant };
 pub const Compiler = struct {
     scanner: Scanner,
     chunk: *Chunk,
+    strings: *strings.Strings,
     current: Token = undefined,
     previous: Token = undefined,
     had_error: bool = false,
@@ -78,8 +79,8 @@ pub const Compiler = struct {
     const case_pattern_max = 16;
 
     /// Compile `source` into `chunk`. Returns false if there were errors.
-    pub fn compile(source: []const u8, chunk: *Chunk) bool {
-        var parser = Compiler{ .scanner = Scanner.init(source), .chunk = chunk };
+    pub fn compile(source: []const u8, chunk: *Chunk, string_table: *strings.Strings) bool {
+        var parser = Compiler{ .scanner = Scanner.init(source), .chunk = chunk, .strings = string_table };
         parser.advance();
 
         parser.block(.eof);
@@ -256,7 +257,7 @@ pub const Compiler = struct {
     }
 
     fn identifierConstant(self: *Compiler, name: Token) ?u16 {
-        const interned = strings.intern(name.lexeme) orelse {
+        const interned = self.strings.intern(name.lexeme) orelse {
             self.errorAt(name, "out of string memory");
             return null;
         };
@@ -631,7 +632,7 @@ pub const Compiler = struct {
     fn string(self: *Compiler) void {
         const body = self.previous.lexeme[1 .. self.previous.lexeme.len - 1];
 
-        var builder = strings.build();
+        var builder = self.strings.build();
         var i: usize = 0;
         while (i < body.len) : (i += 1) {
             if (body[i] != '\\') {
