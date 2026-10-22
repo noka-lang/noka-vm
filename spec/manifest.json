@@ -1,0 +1,806 @@
+{
+  "Values and Types > Equality #1": {
+    "hash": "c8d2c913a3",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Values and Types > Nil Checking #1": {
+    "hash": "5bd222cd06",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Values and Types > Nil Checking #2": {
+    "hash": "91eb51cd20",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Values and Types > Optional Chaining #1": {
+    "hash": "95486a8766",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Values and Types > Optional Chaining #2": {
+    "hash": "7080b9e5f7",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Values and Types > Optional Chaining #3": {
+    "hash": "2e0ad10558",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Lexical Structure > Identifiers #1": {
+    "hash": "725463a39f",
+    "kind": "compiles"
+  },
+  "Lexical Structure > Reserved Keywords #1": {
+    "hash": "58e2663629",
+    "kind": "skip",
+    "reason": "keyword list"
+  },
+  "Lexical Structure > Number Literals #1": {
+    "hash": "5bb63b340a",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Lexical Structure > String Literals #1": {
+    "hash": "94edb2c6eb",
+    "kind": "compiles"
+  },
+  "Lexical Structure > String Literals > String Prefixes #1": {
+    "hash": "4a774abeaa",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Lexical Structure > String Literals > String Prefixes #2": {
+    "hash": "329a750dbb",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Lexical Structure > Comments #1": {
+    "hash": "9a8b039462",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Lexical Structure > Comments > Type Hint Comments #1": {
+    "hash": "70959670c7",
+    "kind": "skip",
+    "reason": "hint syntax illustration: declares add three times and uses ... as bodies"
+  },
+  "Lexical Structure > Block Expressions #1": {
+    "hash": "4e2022b60b",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Lexical Structure > Block Expressions #2": {
+    "hash": "ea4ec71617",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Lexical Structure > Trailing Commas #1": {
+    "hash": "55369492f0",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Bindings #1": {
+    "hash": "02d0f187ff",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Bindings > Examples #1": {
+    "hash": "139de4b645",
+    "kind": "skip",
+    "reason": "deliberately mixes legal lines with lines marked RUNTIME ERROR"
+  },
+  "Grammar > Program Structure #1": {
+    "hash": "c529ce8faf",
+    "kind": "skip",
+    "reason": "grammar production, not a program"
+  },
+  "Grammar > Statements #1": {
+    "hash": "d38b681997",
+    "kind": "skip",
+    "reason": "grammar production, not a program"
+  },
+  "Grammar > Patterns (Destructuring) #1": {
+    "hash": "1f648cefa0",
+    "kind": "skip",
+    "reason": "grammar production, not a program"
+  },
+  "Grammar > Expression Grammar (Precedence: lowest to highest) #1": {
+    "hash": "3a1ea335fd",
+    "kind": "skip",
+    "reason": "grammar production, not a program"
+  },
+  "Grammar > Compound Expressions #1": {
+    "hash": "65ac406d96",
+    "kind": "skip",
+    "reason": "grammar production, not a program"
+  },
+  "Grammar > Lexical Grammar #1": {
+    "hash": "54743381e9",
+    "kind": "skip",
+    "reason": "grammar production, not a program"
+  },
+  "Grammar > Newline Significance (Stack Rule) #1": {
+    "hash": "1bf6a378dc",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Grammar > Line Continuation #1": {
+    "hash": "bc997db49c",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Grammar > Line Continuation #2": {
+    "hash": "ad3fb508bc",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Common Expressions > Declaration and Assignment #1": {
+    "hash": "c961ad33df",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Common Expressions > Compound Assignment #1": {
+    "hash": "da0a988017",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Common Expressions > Increment / Decrement #1": {
+    "hash": "2cb7beee48",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Common Expressions > Field Assignment #1": {
+    "hash": "3cd9aa8329",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Common Expressions > `while` / `end` #1": {
+    "hash": "869b6f5a3b",
+    "kind": "run",
+    "expect": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4"
+    ],
+    "pending": true
+  },
+  "Common Expressions > `for` (Numeric) #1": {
+    "hash": "11fe68a5a4",
+    "kind": "run",
+    "expect": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "9",
+      "8",
+      "7",
+      "6",
+      "5",
+      "4",
+      "3",
+      "2",
+      "1"
+    ],
+    "pending": true
+  },
+  "Common Expressions > `for` (Numeric) #2": {
+    "hash": "841cd4abdb",
+    "kind": "skip",
+    "reason": "loop headers only, no bodies"
+  },
+  "Common Expressions > `for` (Numeric) #3": {
+    "hash": "ad8f446ad0",
+    "kind": "skip",
+    "reason": "loop headers only, no bodies"
+  },
+  "Common Expressions > `for` (Generic / Iterator) #1": {
+    "hash": "e0cabe09b0",
+    "kind": "run",
+    "expect": [
+      "10",
+      "20",
+      "30",
+      "1: 10",
+      "2: 20",
+      "3: 30"
+    ],
+    "pending": true
+  },
+  "Common Expressions > `for` (Generic / Iterator) #2": {
+    "hash": "58f0639774",
+    "kind": "run",
+    "expect": [
+      "name: noka",
+      "ver: 2",
+      "noka",
+      "2"
+    ],
+    "pending": true
+  },
+  "Common Expressions > `for` (Generic / Iterator) #3": {
+    "hash": "1c8f534915",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Common Expressions > `stop` #1": {
+    "hash": "c3c7f636f1",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Common Expressions > `next` #1": {
+    "hash": "b0cd8df3e7",
+    "kind": "run",
+    "expect": [
+      "1",
+      "3",
+      "5",
+      "7",
+      "9"
+    ],
+    "pending": true
+  },
+  "Case Expressions > Single-Line #1": {
+    "hash": "b07d557781",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Case Expressions > Condition Chain (No Match Expression) #1": {
+    "hash": "c4434a1a6f",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Case Expressions > Value Matching #1": {
+    "hash": "11a71bab7b",
+    "kind": "compiles"
+  },
+  "Case Expressions > Comparison Matching #1": {
+    "hash": "5feb431481",
+    "kind": "compiles"
+  },
+  "Case Expressions > Multiple Values Per Branch #1": {
+    "hash": "6cac4ce51a",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Case Expressions > Multi-line Branches #1": {
+    "hash": "e243f835bd",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Case Expressions > Guards #1": {
+    "hash": "2ebf04bf06",
+    "kind": "compiles"
+  },
+  "Membership Operators #1": {
+    "hash": "61feee8e25",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Membership Operators #2": {
+    "hash": "92aa3a9d71",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Pipes #1": {
+    "hash": "ee2a9fd1fc",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Pipes > Placeholder `_` #1": {
+    "hash": "352a65e9eb",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Pipes > Non-call RHS #1": {
+    "hash": "40c686d6c8",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Pipes > Non-call RHS #2": {
+    "hash": "749ba7c536",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Function Captures #1": {
+    "hash": "03d8d10a8a",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Function Captures #2": {
+    "hash": "a71cd5f9be",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Function Captures #3": {
+    "hash": "014004bbc1",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Functions > Named Functions #1": {
+    "hash": "5f5b2f2657",
+    "kind": "run",
+    "expect": [
+      "hello noka"
+    ],
+    "pending": true
+  },
+  "Functions > Return Values #1": {
+    "hash": "ff22e176ec",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Functions > Parameters #1": {
+    "hash": "5cf06c186d",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Functions > Labelled Arguments #1": {
+    "hash": "b577ffb381",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Functions > Skipping Positional Arguments #1": {
+    "hash": "dfc3e429cf",
+    "kind": "skip",
+    "reason": "... stands for a function body"
+  },
+  "Functions > Rest Parameters #1": {
+    "hash": "a5ed2a7f6c",
+    "kind": "run",
+    "epilogue": "print(sum(1, 2, 3, 4))",
+    "expect": [
+      "10"
+    ],
+    "pending": true
+  },
+  "Functions > Closures #1": {
+    "hash": "e89ea59303",
+    "kind": "run",
+    "expect": [
+      "1",
+      "2"
+    ],
+    "pending": true
+  },
+  "Functions > Single-Expression Functions #1": {
+    "hash": "1e3228146e",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Functions > Single-Expression Functions #2": {
+    "hash": "46b524728f",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Functions > Anonymous Functions #1": {
+    "hash": "5dcd10326a",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Functions > Constant Functions #1": {
+    "hash": "71e7ce3974",
+    "kind": "compiles",
+    "pending": true
+  },
+  "`this` and Methods #1": {
+    "hash": "b3049bb008",
+    "kind": "run",
+    "epilogue": "print(player.hp)",
+    "expect": [
+      "110"
+    ],
+    "pending": true
+  },
+  "`this` and Methods > Auto-Binding on Dot Access #1": {
+    "hash": "6fe4e2e570",
+    "kind": "compiles",
+    "pending": true
+  },
+  "`this` and Methods > Bound Function Equality #1": {
+    "hash": "b60c2d088b",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Lifecycle Functions (Host Convention) #1": {
+    "hash": "8076313d16",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Error Handling > The `error` Type #1": {
+    "hash": "4fd6b77935",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Error Handling > The `error` Type #2": {
+    "hash": "b55929220b",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Error Handling > Returning Values and Errors #1": {
+    "hash": "ec44fab59a",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Error Handling > Returning Values and Errors #2": {
+    "hash": "bdceaecbb9",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Error Handling > Returning Values and Errors #3": {
+    "hash": "1e1df7923a",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Error Handling > Consuming a Fallible Call #1": {
+    "hash": "c5ee04c1f7",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Error Handling > Consuming a Fallible Call #2": {
+    "hash": "0cbde821fb",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Error Handling > Consuming a Fallible Call #3": {
+    "hash": "bd23ba2273",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Error Handling > Consuming a Fallible Call #4": {
+    "hash": "c3d64e4f60",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Error Handling > Must-Use #1": {
+    "hash": "826f81ade9",
+    "kind": "panics",
+    "panic": "must_use",
+    "prelude": "fn risky() err \"boom\"\nfn draw(v) nil",
+    "pending": true
+  },
+  "Error Handling > Must-Use #2": {
+    "hash": "501e798ee5",
+    "kind": "run",
+    "prelude": "fn risky() err \"boom\"\nfn recover(e) nil\nfn draw(v) nil",
+    "expect": [],
+    "pending": true
+  },
+  "Error Handling > Clobber #1": {
+    "hash": "b5fc8999d6",
+    "kind": "panics",
+    "panic": "must_use",
+    "prelude": "fn first() err \"one\"\nfn second() err \"two\"",
+    "pending": true
+  },
+  "Error Handling > `catch` #1": {
+    "hash": "994ba67eb6",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Strings #1": {
+    "hash": "afe26281bc",
+    "kind": "run",
+    "expect": [
+      "h",
+      "o"
+    ],
+    "pending": true
+  },
+  "Strings #2": {
+    "hash": "7237137e47",
+    "kind": "panics",
+    "panic": "frozen",
+    "pending": true
+  },
+  "Arrays > Creating Arrays #1": {
+    "hash": "cdbf8d1f3a",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Arrays > Accessing Values #1": {
+    "hash": "dd9ad95028",
+    "kind": "run",
+    "expect": [
+      "10",
+      "30"
+    ],
+    "pending": true
+  },
+  "Arrays > Negative Indexing #1": {
+    "hash": "5e32699905",
+    "kind": "run",
+    "expect": [
+      "30",
+      "20"
+    ],
+    "pending": true
+  },
+  "Arrays > Setting Values #1": {
+    "hash": "0838ec4fcd",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Arrays > Length #1": {
+    "hash": "462e9421c6",
+    "kind": "run",
+    "expect": [
+      "3"
+    ],
+    "pending": true
+  },
+  "Arrays > Array Spread #1": {
+    "hash": "2d06956bad",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Arrays > Arrays Are Passed by Reference #1": {
+    "hash": "91590b6dc1",
+    "kind": "run",
+    "expect": [
+      "2"
+    ],
+    "pending": true
+  },
+  "Objects > Creating Objects #1": {
+    "hash": "d39022b5c5",
+    "kind": "run",
+    "expect": [
+      "100"
+    ],
+    "pending": true
+  },
+  "Objects > Accessing Values #1": {
+    "hash": "aa39590138",
+    "kind": "run",
+    "expect": [
+      "noka",
+      "noka"
+    ],
+    "pending": true
+  },
+  "Objects > Setting Values #1": {
+    "hash": "679c0fe61a",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Objects > Object Spread #1": {
+    "hash": "35db225977",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Destructuring > Array Destructuring #1": {
+    "hash": "01905125c7",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Destructuring > Object Destructuring #1": {
+    "hash": "a67488a918",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Destructuring > Defaults #1": {
+    "hash": "fb49a9f550",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Destructuring > Rename Plus Default #1": {
+    "hash": "fdea1b186b",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Destructuring > Nested Patterns #1": {
+    "hash": "cb61ac5450",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Destructuring > In Function Parameters #1": {
+    "hash": "c93f2c22fa",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Destructuring > In Function Parameters #2": {
+    "hash": "c3795881d8",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Destructuring > In `for ... in` #1": {
+    "hash": "6d6e1712e2",
+    "kind": "run",
+    "expect": [
+      "1: a",
+      "2: b",
+      "noka has 100",
+      "zed has 50"
+    ],
+    "pending": true
+  },
+  "Destructuring > Destructuring with All Binding Operators #1": {
+    "hash": "b7ae4436db",
+    "kind": "skip",
+    "reason": "shows the three binding operators on the same names"
+  },
+  "Built-in Functions > Array #1": {
+    "hash": "176c766f77",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Runtime Behavior > Variable Scoping #1": {
+    "hash": "d78e6afa73",
+    "kind": "run",
+    "expect": [
+      "20",
+      "10"
+    ],
+    "pending": true
+  },
+  "Runtime Behavior > Function Hoisting #1": {
+    "hash": "007c1e53ed",
+    "kind": "run",
+    "expect": [
+      "hello noka"
+    ],
+    "pending": true
+  },
+  "Runtime Behavior > Function Hoisting #2": {
+    "hash": "3f2cfac70d",
+    "kind": "panics",
+    "panic": "undefined",
+    "pending": true
+  },
+  "Runtime Behavior > Function Hoisting #3": {
+    "hash": "ecece4e5aa",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Example Programs > Hello World #1": {
+    "hash": "8a35ea4c78",
+    "kind": "run",
+    "expect": [
+      "hello world"
+    ],
+    "pending": true
+  },
+  "Example Programs > FizzBuzz #1": {
+    "hash": "f4a591e020",
+    "kind": "run",
+    "expect": [
+      "1",
+      "2",
+      "fizz",
+      "4",
+      "buzz",
+      "fizz",
+      "7",
+      "8",
+      "fizz",
+      "buzz",
+      "11",
+      "fizz",
+      "13",
+      "14",
+      "fizzbuzz",
+      "16",
+      "17",
+      "fizz",
+      "19",
+      "buzz",
+      "fizz",
+      "22",
+      "23",
+      "fizz",
+      "buzz",
+      "26",
+      "fizz",
+      "28",
+      "29",
+      "fizzbuzz"
+    ],
+    "pending": true
+  },
+  "Example Programs > Fibonacci (Recursive) #1": {
+    "hash": "f9fbfe56db",
+    "kind": "run",
+    "expect": [
+      "1",
+      "1",
+      "2",
+      "3",
+      "5",
+      "8",
+      "13",
+      "21",
+      "34",
+      "55",
+      "89"
+    ],
+    "pending": true
+  },
+  "Example Programs > Closures #1": {
+    "hash": "a6c927bdbc",
+    "kind": "run",
+    "expect": [
+      "1",
+      "2",
+      "3"
+    ],
+    "pending": true
+  },
+  "Example Programs > Game Loop #1": {
+    "hash": "649792303b",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Example Programs > Destructuring #1": {
+    "hash": "7aa1955a8f",
+    "kind": "run",
+    "expect": [
+      "noka at 10, 20"
+    ],
+    "pending": true
+  },
+  "Example Programs > Pipes #1": {
+    "hash": "4de7f9c1b9",
+    "kind": "run",
+    "expect": [],
+    "pending": true
+  },
+  "Example Programs > Methods and `this` #1": {
+    "hash": "e27e75d4d4",
+    "kind": "run",
+    "expect": [
+      "noka: 110hp",
+      "noka: 110hp"
+    ],
+    "pending": true
+  },
+  "Example Programs > Function Captures #1": {
+    "hash": "c22ace6647",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Example Programs > Labelled Arguments #1": {
+    "hash": "07cae411b5",
+    "kind": "compiles",
+    "pending": true
+  },
+  "Example Programs > Loop Return Values #1": {
+    "hash": "e8573e6919",
+    "kind": "run",
+    "expect": [
+      "2"
+    ],
+    "pending": true
+  },
+  "Example Programs > Membership #1": {
+    "hash": "72dc99f081",
+    "kind": "run",
+    "expect": [
+      "armed!",
+      "need range",
+      "knight"
+    ],
+    "pending": true
+  },
+  "Example Programs > Error Handling #1": {
+    "hash": "ae09054107",
+    "kind": "run",
+    "expect": [
+      "bad score: not a number",
+      "score: 0",
+      "ok: 42",
+      "subsystem down: undefined"
+    ],
+    "pending": true
+  }
+}

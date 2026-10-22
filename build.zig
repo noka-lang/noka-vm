@@ -108,4 +108,16 @@ pub fn build(b: *std.Build) void {
 
     const bench_step = b.step("bench", "Benchmark bench/programs natively and as vm.wasm against the baseline");
     bench_step.dependOn(&bench.step);
+
+    // ---- zig build spec ------------------------------------------------------------------------
+    // Runs every LANGUAGE.md code block against spec/manifest.json through the native runner.
+    // Pass `-- --update` to sync the pending flags, `-- -v` to list every block.
+    const spec = b.addSystemCommand(&.{ "node", "spec/spec.mjs" });
+    spec.addArg("--noka");
+    spec.addArtifactArg(exe);
+    spec.addPassthruArgs();
+
+    const spec_step = b.step("spec", "Run every LANGUAGE.md example against spec/manifest.json");
+    spec_step.dependOn(&spec.step);
+
 }
