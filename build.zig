@@ -120,4 +120,16 @@ pub fn build(b: *std.Build) void {
     const spec_step = b.step("spec", "Run every LANGUAGE.md example against spec/manifest.json");
     spec_step.dependOn(&spec.step);
 
+    // ---- zig build fuzz ------------------------------------------------------------------------
+    // Replays fuzz/corpus, then runs random programs through the Debug runner and vm.wasm,
+    // saving any crash to the corpus. Pass `-- --count N` or `-- --seed N`.
+    const fuzz = b.addSystemCommand(&.{ "node", "fuzz/fuzz.mjs" });
+    fuzz.addArg("--noka");
+    fuzz.addArtifactArg(exe);
+    fuzz.addArg("--wasm");
+    fuzz.addFileArg(wasm.getEmittedBin());
+    fuzz.addPassthruArgs();
+
+    const fuzz_step = b.step("fuzz", "Fuzz the VM natively (Debug) and as vm.wasm, keeping crashes in fuzz/corpus");
+    fuzz_step.dependOn(&fuzz.step);
 }
