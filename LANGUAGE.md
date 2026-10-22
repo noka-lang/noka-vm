@@ -21,7 +21,7 @@ There are eight value types:
 | Type       | Examples                     | Notes                                |
 |------------|------------------------------|--------------------------------------|
 | `number`   | `42`, `3.14`, `0xFF`, `0b101`| IEEE 754 double (JS `number`)        |
-| `string`   | `"hello"`, `'world'`         | Single or double quoted              |
+| `string`   | `"hello"`, `'world'`         | Bytes in the Noka charset; a value, never shared (see [Strings](#strings)) |
 | `boolean`  | `true`, `false`              |                                      |
 | `nil`      | `nil`                        | Represents absence of a value        |
 | `array`    | `[1, 2, 3]`                  | Ordered, 1-indexed                   |
@@ -34,6 +34,10 @@ There is no implicit type coercion. Arithmetic operators require numbers. The `+
 ### Equality
 
 `==` uses **deep equality** for numbers, strings, booleans, nil, arrays, and objects. Two arrays or objects with the same contents are equal. Functions use **reference equality:** two functions are equal only if they are the same reference.
+
+Numbers compare by IEEE 754 rules, including inside arrays and objects and in `in`: `nan == nan` is `false` and `-0 == 0` is `true`.
+
+Deep equality returns `true` at once for the same reference and otherwise recurses up to 64 levels deep. Past that it panics with "value too deeply nested or cyclic".
 
 ```
 [1, 2] == [1, 2]    // true (deep)
@@ -81,6 +85,8 @@ user?.profile.name    // if user is nil -> nil
 
 Use optional chaining when the intermediate step is legitimately optional. Use regular access when you expect the field to exist; you will get a clearer error if it is missing.
 
+Regular field access on `nil`, or on any other non-object, panics. Reading a key an object doesn't have returns `nil`. See [Objects](#objects).
+
 Long chains can wrap across lines: a line starting with `.`, `?.`, `?[`, or `?(` continues the previous line. See [Line Continuation](#line-continuation).
 
 ```
@@ -110,14 +116,17 @@ Identifiers are case-sensitive. `foo` and `Foo` are different variables.
 case    end     while   for     in
 stop    next    fn      do      this
 and     or      not     band    bor
-bnot    bxor    init    tick    draw
-true    false   nil     if
-ret     err     catch
+bnot    bxor    true    false   nil
+if      ret     err     catch
 ```
 
 `if` is reserved solely for use as a guard in `case` branches (`pat if cond -> body`); it has no standalone statement form.
 
 `ret`, `err`, and `catch` belong to the error-handling system; see [Error Handling](#error-handling).
+
+`init`, `tick`, and `draw` are not keywords. They are ordinary names the engine calls each frame; see [Lifecycle Functions](#lifecycle-functions-host-convention).
+
+Any keyword may be used as a field name after `.` and `?.` and as a key in an object literal (`obj.end`, `{next: 1}`). Shorthand (`{end}`) and unrenamed destructuring (`{next} : obj`) stay illegal; write `{next: n} : obj`.
 
 ### Number Literals
 
@@ -231,12 +240,12 @@ fn add(x, y)
 end
 
 /// num|str -> str
-fn tostr(v)
+fn show(v)
   ...
 end
 
 /// num, num, num? -> nil
-fn draw(x, y, color)
+fn plot(x, y, color)
   ...
 end
 
@@ -246,7 +255,7 @@ fn sum(first, *rest)
 end
 ```
 
-Short type names: `num`, `str`, `boo`, `nil`, `arr`, `obj`, `fn`. Unions: `num|str`. Optional/nullable: `num?` (shorthand for `num|nil`). Variadic: `*num`, or `*rest: num` when named. Omit the `->` entry to leave the return type unspecified.
+Short type names: `num`, `str`, `bool`, `nil`, `arr`, `obj`, `fn`, `err`. These are the same names `type()` returns and runtime errors use. Unions: `num|str`. Optional/nullable: `num?` (shorthand for `num|nil`). Variadic: `*num`, or `*rest: num` when named. Omit the `->` entry to leave the return type unspecified.
 
 A multi-line hint must be a run of consecutive `///` lines immediately above the function, a plain `//` line or a blank line ends the block. In the multi-line form, every entry must be named and the names should match the function's parameters; an unnamed or mismatched entry is an editor warning.
 
@@ -258,6 +267,7 @@ Type hints apply to named and anonymous functions only.
 - Newlines are statement separators
 - Multiple statements execute sequentially
 - The last expression is the return value
+- A block that ends in a statement (a declaration, for example) evaluates to `nil`, so `do x : 1 end` is `nil`
 - Bindings introduced inside the block are scoped to it and do not leak out
 - An empty block (`do end`) evaluates to `nil`
 
@@ -385,6 +395,12 @@ Three-character:
 | `<<=` | compound left shift  |
 | `>>=` | compound right shift |
 
+`%` is floored: the result takes the divisor's sign, so `-7 % 3` is `2`, and for fractions `a % b` is `a - floor(a / b) * b`. `% 0` panics like division by zero. Floored modulo makes wrapping such as `x = (x - 1) % 192` correct.
+
+Bitwise operators (`band`, `bor`, `bxor`, `bnot`, `<<`, `>>`) work on signed 32-bit integers. Operands must be whole numbers in signed 32-bit range and shift counts must be 0 to 31, or the operation panics. `>>` preserves the sign, and results are ordinary numbers. A full 32-bit mask such as `0xFFFFFFFF` is out of range.
+
+`<`, `>`, `<=` and `>=` compare two numbers, or two strings byte by byte. Byte order puts uppercase before lowercase (`"Zed" < "abe"`). Mixed types panic.
+
 ## Bindings
 
 NokaScript has two declaration operators and one assignment operator:
@@ -392,7 +408,7 @@ NokaScript has two declaration operators and one assignment operator:
 | Syntax   | Meaning                                     |
 |----------|---------------------------------------------|
 | `x : 5`  | declare new mutable local                  |
-| `x # 5`  | declare new constant local (deep freeze)   |
+| `x # 5`  | declare new constant local (frozen snapshot) |
 | `x = 5`  | assign to existing binding (error if none) |
 | `v, e ?: f()` | declare value + error from a fallible call (see [Error Handling](#error-handling)) |
 
@@ -404,7 +420,14 @@ Every variable must be explicitly declared with `:` or `#` before use. Assignmen
 
 Re-declaring a variable in the **same scope** is an error (runtime error at the top level, compile error inside blocks). Shadowing a variable from an **outer scope** is allowed.
 
-Constants (`#`) can never be reassigned (runtime error at the top level, compile error inside blocks). The value is **deep-frozen**: arrays, objects, and strings declared with `#` cannot be mutated. Attempting to reassign, push to, set fields on, or index-assign a frozen value is a runtime error.
+Constants (`#`) can never be reassigned (runtime error at the top level, compile error inside blocks). A constant holds a **frozen snapshot**: everything reachable from it is frozen, and nothing outside it changes.
+
+- Arrays and objects written as literals in the declaration are frozen in place.
+- An array or object reached through a name or a call is copied, then frozen. The original stays mutable, so after `b # a`, `push(a, 4)` still works and `push(b, 4)` panics. After `ui # {target: player}`, `ui.target` is a frozen copy of `player` at that moment, and `player` stays live.
+- Copying goes depth-first, up to 64 levels deep. A deeper or cyclic value panics with "value too deeply nested or cyclic". A part reached twice is copied twice.
+- Strings are values, so `name # "noka"` simply makes the binding constant, and `name[1] = "N"` panics. Errors are already immutable and are shared. Functions are shared and not frozen: a closure inside a constant can still change the variables it captured.
+
+Reassigning a constant, or pushing to, setting fields on, or index-assigning a frozen value, panics with kind `"frozen"`. A frozen value stays frozen wherever it is passed: after `t : ui.target`, `t.hp = 0` panics. Spreading a frozen value (`[*b]`, `{*b}`) gives an unfrozen copy.
 
 Field and index assignment always use `=`:
 
@@ -451,15 +474,13 @@ NokaScript is mostly expression-oriented: loops, `case`, `fn`, `do` blocks, and 
 - Destructuring bindings
 - `stop [expr]` and `next` (loop control)
 - `ret [expr]` and `err expr` (function return / error return)
-- Lifecycle blocks `init` / `tick` / `draw` (top-level only)
 
 Assignment (`=`), compound assignment, and `++` / `--` stay as expressions. They mutate an existing binding and produce the new value, without introducing names.
 
 ### Program Structure
 
 ```
-program   = { NEWLINE } { top_item NEWLINE } EOF
-top_item  = statement | lifecycle_block
+program   = { NEWLINE } { statement NEWLINE } EOF
 block     = { NEWLINE } { statement NEWLINE }
 
 statement = binding
@@ -472,8 +493,6 @@ statement = binding
           | err_stmt
           | expression
 ```
-
-Lifecycle blocks are only legal at program top level. At most one each of `init`, `tick`, `draw` per program; duplicates are a parse error.
 
 ### Statements
 
@@ -533,7 +552,7 @@ compound_op    = "+=" | "-=" | "*=" | "/=" | "%="
 
 assignable     = IDENTIFIER
                | "this"
-               | assignable "." IDENTIFIER
+               | assignable "." field_name
                | assignable "[" expression "]"
 
 pipe           = logic_or { "|>" logic_or }
@@ -552,12 +571,13 @@ exponent       = unary { "**" unary }
 unary          = ( "not" | "-" | "bnot" ) unary | postfix
 postfix        = chain [ "?" ]
 chain          = primary { chain_op }
-chain_op       = "." IDENTIFIER          // field access
+chain_op       = "." field_name          // field access
                | "[" expression "]"      // index access
                | "(" args ")"            // call
-               | "?." IDENTIFIER         // optional field
+               | "?." field_name         // optional field
                | "?[" expression "]"     // optional index
                | "?(" args ")"           // optional call
+field_name     = IDENTIFIER | keyword
 args           = [ arg { "," arg } [ "," ] ]
 arg            = expression | IDENTIFIER ":" expression | <empty>
 primary        = NUMBER | STRING | "true" | "false" | "nil" | "_"
@@ -608,12 +628,6 @@ case_pattern    = expression | comparison_op expression
 comparison_op   = ">" | "<" | ">=" | "<=" | "==" | "!="
 branch_body     = expression | stop_stmt | next_stmt | ret_stmt | err_stmt
 
-// Host convention, not core language syntax. The NokaOS runtime
-// recognizes `init` / `tick` / `draw` at top level and drives them from
-// the game loop. Other hosts may define a different set.
-lifecycle_block = ( "init" | "tick" | "draw" ) "(" [ params ] ")" NEWLINE
-                  block "end"
-
 array_literal   = "[" [ arr_elem { "," arr_elem } [ "," ] ] "]"
 arr_elem        = expression | "*" expression
 
@@ -622,9 +636,9 @@ object_body     = obj_spread
                 | obj_spread "," obj_field { "," obj_field } [ "," ]
                 | obj_field { "," obj_field } [ "," ]
 obj_spread      = "*" expression
-obj_field       = IDENTIFIER ":" expression
+obj_field       = field_name ":" expression    // keywords allowed as keys
                 | STRING ":" expression
-                | IDENTIFIER                    // shorthand
+                | IDENTIFIER                    // shorthand, not a keyword
 ```
 
 Objects allow at most one spread, which must appear first. The `_` catch-all in `case_expr` must be the last branch; mid-position `_` is a parse error.
@@ -638,11 +652,11 @@ Every expression produces a value:
 | `x = 5`             | the assigned value (`5`)                         |
 | `x++` / `x--`       | the value after increment/decrement              |
 | `x += 1`            | the assigned value                               |
-| `while ... end`      | last completed iteration's value, or `nil`       |
-| `for ... end`        | last completed iteration's value, or `nil`       |
+| `while ... end`      | last completed iteration's value, or `nil` (an iteration ended by `next` leaves it unchanged) |
+| `for ... end`        | last completed iteration's value, or `nil` (an iteration ended by `next` leaves it unchanged) |
 | `case ... end`       | matched branch's value, or `nil` if no match     |
 | `fn ... end`       | the function value                               |
-| `do ... end`         | last expression in the block, or `nil` if empty  |
+| `do ... end`         | last expression in the block, or `nil` if empty or ending in a statement |
 | `catch do ... end`   | the block's value, or the error if it panicked   |
 
 Statements (`:`, `#`, `?:`, destructuring, `stop`, `next`, `ret`, `err`) don't appear as values, they execute for their effects. `stop <expr>` causes the enclosing loop to return `<expr>`; bare `stop` returns `nil`. `ret <expr>` returns `<expr>` from the enclosing function (bare `ret` returns `nil`); `err <expr>` returns early with an error.
@@ -681,7 +695,7 @@ BIN_DIGIT     = "0" | "1"
 
 keyword       = "case" | "end" | "while" | "for" | "in"
               | "stop" | "next" | "fn" | "do" | "this"
-              | "init" | "tick" | "draw" | "and" | "or"
+              | "and" | "or"
               | "not" | "band" | "bor" | "bnot" | "bxor"
               | "true" | "false" | "nil" | "if"
               | "ret" | "err" | "catch"
@@ -714,7 +728,6 @@ Pushing and popping:
 | `do` ... `end`                                         | significant   |
 | `while` ... `end`                                      | significant   |
 | `for` ... `end`                                        | significant   |
-| `init` / `tick` / `draw` ... `end`                     | significant   |
 | `fn(...)` NEWLINE ... `end` (multi-line form)        | significant   |
 | `case [expr]` NEWLINE ... `end` (multi-line form)      | significant   |
 
@@ -728,7 +741,7 @@ foo(do
   x * 2
 end)
 
-result : map(items, fn(x)
+result : each(items, fn(x)
   case x > 0 -> x * 2
   _ -> 0
   end
@@ -817,7 +830,7 @@ Assignment sits below pipe, so `x = 5 |> f()` parses as `x = (5 |> f())`. The LH
 
 ```
 x : 10    // declare mutable
-x # 10    // declare constant (deep freeze)
+x # 10    // declare constant (frozen snapshot)
 x = 20    // assign to existing (error if undeclared)
 ```
 
@@ -883,7 +896,7 @@ for i : 9, 1, -1    // with step
 end
 ```
 
-The range is **inclusive** on both ends. `for i : 1, 9` iterates 1 through 9. The loop variable is declared by `:` and scoped to the for block. A fresh binding is created each iteration, so captures taken inside the loop see the value of `i` at that iteration.
+The range is **inclusive** on both ends. `for i : 1, 9` iterates 1 through 9. The loop variable is declared as a constant binding and scoped to the for block: assigning it is a compile error ("cannot assign to loop variable `i`"). A fresh binding is created each iteration, so captures taken inside the loop see the value of `i` at that iteration.
 
 Start, end, and step must be **integers**, non-integer values are a runtime error. The default step is `1`. A step of `0` is a runtime error.
 
@@ -905,7 +918,7 @@ Returns the last completed iteration's value, or `nil` if zero iterations.
 
 ### `for` (Generic / Iterator)
 
-Iterates over arrays or objects.
+Iterates over arrays, objects, or strings.
 
 ```
 items : [10, 20, 30]
@@ -938,7 +951,24 @@ for _, v in info
 end
 ```
 
-`for v in` (single variable) is only valid for arrays, not objects.
+`for v in` (single variable) is only valid for arrays and strings, not objects.
+
+Strings iterate by character: `for c in s` yields one-character strings, and `for i, c in s` adds the 1-based index.
+
+Loop variables are constant bindings, as in numeric `for`: assigning one is a compile error. The value isn't frozen, so `for e in enemies` still allows `e.hp -= 1`.
+
+**Changing a collection while iterating it:**
+
+- Arrays are walked live by index, checking the current length each step. Pushed elements are visited, and removals shift later elements.
+- Objects panic with kind `"iteration"` if a key is added or removed during the loop. Changing a value is allowed.
+
+To remove items while iterating, walk the array backwards by index:
+
+```
+for i : len(enemies), 1, -1
+  case enemies[i].hp <= 0 -> remove(enemies, i)
+end
+```
 
 ### `stop`
 
@@ -948,7 +978,7 @@ Exits the innermost enclosing `while` or `for` loop within the current function.
 
 ```
 // Find first match, loop returns the index
-fn find(arr, val)
+fn index_of(arr, val)
   for i, v in arr
     case v == val -> stop i
   end
@@ -959,7 +989,7 @@ end
 
 ### `next`
 
-Skips to the next iteration of the innermost enclosing loop. Does not affect the loop's return value. `next` takes no value.
+Skips to the next iteration of the innermost enclosing loop. An iteration ended by `next` leaves the loop's value unchanged, while an iteration whose body ends in a statement contributes `nil`. `next` takes no value.
 
 ```
 for i : 1, 9
@@ -980,7 +1010,7 @@ A single branch on one line needs no `end`. Single-line case is always a bare co
 
 ```
 case x > 5 -> print("big")
-case alive? -> tick(dt)
+case alive? -> tick()
 ```
 
 ### Condition Chain (No Match Expression)
@@ -1088,7 +1118,7 @@ returns `nil`.
 The `in` operator tests membership. Returns `true` or `false`.
 
 ```
-// Array: checks if value exists
+// Array: checks if some element == the value (deep equality)
 "sword" in items
 
 // Object: checks if key exists
@@ -1176,10 +1206,12 @@ clamp(_, 0, _)    // fn(x) clamp(x, 0, x)
 `_` captures the **nearest enclosing call**. A fully-formed capture is just a value, parent calls see a function, not a `_`.
 
 ```
-map(items, add(1, _))  // map(items, fn(x) add(1, x))
-                       // _ is inside add(), so add() is the capture
-                       // map() receives items and a function
+each(items, add(1, _))  // each(items, fn(x) add(1, x))
+                        // _ is inside add(), so add() is the capture
+                        // each() receives items and a function
 ```
+
+Only a bare `_` passed as a whole argument makes a capture. `f(_ + 1)` is a compile error that suggests `fn(x) f(x + 1)`, and reading `_` anywhere else is a compile error.
 
 Captures and pipe placeholders use the same `_` symbol and the same semantics (all `_` filled with one value). Pipes feed the value immediately; captures produce a closure for later use.
 
@@ -1191,7 +1223,7 @@ items |> sort(fn(x) less(x, x))
 // Common use with higher-order functions:
 nums |> filter(greater(_, 0))
 sorted : sort(items, less(_, _))
-doubled : map(nums, mul(2, _))
+doubled : each(nums, mul(2, _))
 ```
 
 ## Functions
@@ -1206,7 +1238,7 @@ end
 greet("noka")
 ```
 
-Named function declarations are **hoisted**: they can be called before their declaration in the source. This applies at all scope levels. Named functions create mutable bindings (equivalent to `:`).
+Named function declarations are **hoisted**: they can be called before their declaration in the source. This applies at all scope levels. Named functions create mutable bindings (equivalent to `:`). A hoisted function that reads a local whose declaration hasn't run yet panics with "`x` used before its declaration".
 
 ### Return Values
 
@@ -1217,7 +1249,7 @@ fn double(x)
   x * 2
 end
 
-fn abs(x)
+fn magnitude(x)
   case
     x < 0 -> -x
     _ -> x
@@ -1238,28 +1270,32 @@ end
 All parameters are **optional by default** and default to `nil` if not provided. Use `:` to specify an explicit default value. Use `?` to mark a parameter as explicitly optional (defaults to `nil`, same as no annotation, useful for documentation).
 
 ```
-fn draw(x, y, w: 8, h: 8)
+fn box(x, y, w: 8, h: 8)
   rectf(x, y, w, h)
 end
 
-draw(10, 20)            // x=10, y=20, w=8, h=8
-draw(10, 20, 16, 16)    // x=10, y=20, w=16, h=16
+box(10, 20)            // x=10, y=20, w=8, h=8
+box(10, 20, 16, 16)    // x=10, y=20, w=16, h=16
 ```
+
+Extra arguments are ignored unless a rest parameter collects them. So a callback that declares fewer parameters than it's called with simply doesn't receive the rest: `each` and `filter` always pass `(v, i)`, and `fn(v) v * 2` works.
+
+Default expressions are evaluated on every call, and may refer to earlier parameters: `fn f(a, b: a * 2)`.
 
 ### Labelled Arguments
 
 Arguments can be passed by name using `name: value` syntax at the call site. Unlabelled arguments must come **before** labelled arguments.
 
 ```
-fn draw(x, y, w: 8, h: 8)
+fn box(x, y, w: 8, h: 8)
   rectf(x, y, w, h)
 end
 
-draw(10, 20, w: 16)    // x=10, y=20, w=16, h=8
-draw(10, 20, h: 16)    // x=10, y=20, w=8, h=16
+box(10, 20, w: 16)    // x=10, y=20, w=16, h=8
+box(10, 20, h: 16)    // x=10, y=20, w=8, h=16
 ```
 
-Providing the same argument both positionally and by label is a runtime error.
+Providing the same argument both positionally and by label panics with kind `"args"`, and so does a label that names no parameter ("unknown parameter `wdth`"). Built-ins accept labels using their documented parameter names: `rectf(x, y, h: 16)`.
 
 ### Skipping Positional Arguments
 
@@ -1323,7 +1359,7 @@ fn neg(x) -x
 
 // Anonymous single-expression
 sort(items, fn(a, b) a < b)
-doubled : map(nums, fn(x) x * 2)
+doubled : each(nums, fn(x) x * 2)
 ```
 
 Multi-line form always requires `end`:
@@ -1389,10 +1425,9 @@ h()                // this = player, works correctly
 - `this` is available inside any function stored on an object
 - `obj.method()` binds `this` to `obj`
 - `h : obj.method` returns a bound function (auto-binding)
+- Every read of a function out of an object field binds `this`: `obj.heal`, `obj["heal"]`, `{heal} : obj`, and `v` in `for k, v in obj`
+- A function never reached through a field inherits the `this` of the call that created it, so `each(buffs, fn(b) this.hp += b)` inside a method sees the method's `this`
 - `this` outside of a bound context is a runtime error
-- `this` used **directly** inside a lifecycle block (`init`/`tick`/`draw`)
-  is a runtime error. `this` is fine inside methods called from a
-  lifecycle block (e.g., `player.update()` reaches its `this` normally)
 
 ### Bound Function Equality
 
@@ -1409,43 +1444,41 @@ a == c    // false: different `this`
 
 Unbound functions still use reference equality. A bound function and the raw function it wraps are not equal.
 
-## Lifecycle Blocks (Host Convention)
+## Lifecycle Functions (Host Convention)
 
-Lifecycle blocks are a **NokaOS host convention**, not a core language feature. The runtime looks for `init`, `tick`, and `draw` at program top level and drives them from the game loop. Another host could ignore these names entirely or define its own set.
-
-Programs that run in the game loop define lifecycle blocks. These are first-class keywords, not function definitions. Parens are always required. All three are optional and independent.
-
-**Lifecycle blocks are only legal at program top level.** Defining them inside a function, block, or another lifecycle block is a parse error. At most one each of `init`, `tick`, and `draw` per program; duplicates are a parse error.
+Lifecycle functions are a **Noka console convention**, not a core language feature. `init`, `tick`, and `draw` are ordinary functions, PICO-8 style. The engine looks up the program's top-level names `init`, `tick`, and `draw` and calls them if they exist: `init()` once at start, then `tick()` and `draw()` every frame at 60 Hz. Another host could ignore these names entirely.
 
 ```
 x : 0
-speed # 2
+speed # 120    // pixels per second
 
-init()
-  x = 100
+fn init()
+  x = 10
 end
 
-tick(dt)
+fn tick()
   x += speed * dt
 end
 
-draw()
+fn draw()
   cls()
   rectf(x, 10, 8, 8)
 end
 ```
 
-| Block      | Called                              | Typical use           |
-|------------|-------------------------------------|-----------------------|
-| `init()`   | Once, when program starts           | Setup state           |
-| `tick(dt)` | Every frame, receives delta time    | Update logic          |
-| `draw()`   | Every frame, after tick             | Render to screen      |
+| Function | Called                          | Typical use      |
+|----------|---------------------------------|------------------|
+| `init()` | Once, after top-level code runs | Setup state      |
+| `tick()` | Every frame, 60 times a second  | Update logic     |
+| `draw()` | Every frame, after `tick`       | Render to screen |
 
-Code outside lifecycle blocks runs once at load time (top-level initialization).
+`dt` is a built-in constant equal to 1/60, so programs can work in seconds (`speed` in pixels per second). It never varies: every device steps a program identically. Neither `tick` nor `draw` takes arguments, and animation inside `draw` uses `time()`.
 
-If a lifecycle block is not defined, nothing happens for that phase. A program with only `draw` renders a static frame. A program with only `tick` runs logic without display. A program with no lifecycle blocks runs top-level code once and exits.
+Top-level code runs once at load, then the engine checks top-level must-use (see [Must-Use](#must-use)) and calls `init()`. Put setup that can fail in `init()`, not at top level.
 
-Parameters (`dt` in `tick`) are scoped to the lifecycle block and shadow any outer bindings with the same name.
+The lookup is by name each time, so reassigning `draw` swaps the handler, and `player.draw()` or `{draw: fn() ... end}` are ordinary methods. If a function doesn't exist, nothing happens for that phase. A program with only `draw` renders a static frame. A program with only `tick` runs logic without display. A program with neither runs top-level code once and exits.
+
+When a frame runs long, the engine runs extra `tick`s and skips `draw` to catch up, at most two ticks per screen refresh, and drops any backlog beyond that. A slow program runs in slow motion, never with wrong physics. `cpu()` reports how much of the frame the last `tick` and `draw` used.
 
 ## Error Handling
 
@@ -1454,23 +1487,27 @@ NokaScript separates two kinds of failure:
 - **Panics** are for *bugs*: programming errors that should never
   happen in correct code (type errors, calling `nil`, out-of-range
   mutation, division by zero, must-use violations). A panic unwinds the
-  call stack to the nearest `catch`. If nothing catches it, the host's
-  per-frame wrapper stops the program and shows the error overlay
-  (reporting the real runtime type, not a type hint).
+  call stack to the nearest `catch`. If nothing catches it, the engine
+  stops the program and shows the crash screen (reporting the real
+  runtime type, not a type hint).
 - **Errors** are ordinary *values* for *recoverable* failure: a save
   that didn't write, input that didn't parse, a lookup that legitimately
   failed. Errors are threaded explicitly, and the language makes it hard
   to drop one by accident.
 
+A third kind of stop is neither: the **hang guard**. A single call into a program (top-level code, `init`, `tick` or `draw`) that runs past 2^28 instructions, about a second of work, is stopped. It bypasses every `catch`, so a runaway loop can't swallow it, and the crash screen shows "stopped responding".
+
 ### The `error` Type
 
-`error` is a distinct value type (`type(e) == "error"`). Every error has:
+`error` is a distinct value type (`type(e) == "err"`). Every error has:
 
 | Field      | Type   | Notes                              |
 |------------|--------|------------------------------------|
 | `.message` | string | always present                     |
 | `.kind`    | string | always present; a free-form tag    |
 | `.data`    | any    | optional payload, `nil` if unset   |
+
+Errors are immutable: reassigning `.message`, `.kind` or `.data` panics with kind `"frozen"`. The value stored in `.data` is not frozen.
 
 Construct one with the `error` built-in:
 
@@ -1485,6 +1522,25 @@ e : error("overflow", "math", {n: x}).   // with data payload
 ```
 e?    // true if e holds an error, false if nil
 ```
+
+### Panic Kinds
+
+A caught panic is an `error` whose `.data` is `{line: n}` and whose `.kind` is one of:
+
+| Kind | Raised by |
+|---|---|
+| `"type"` | wrong operand types, calling a non-function, a non-boolean in `and`/`or`/`not` or a condition, a non-string object key |
+| `"undefined"` | undefined name, local used before its declaration |
+| `"index"` | index 0, fractional index, write past `len + 1`, multi-character string write, a color outside 1 to 32 |
+| `"frozen"` | mutating a frozen value, assigning a constant or built-in at runtime, reassigning an error's fields |
+| `"math"` | division or modulo by zero, bitwise operand or shift out of range, non-integer `for` bounds, `for` step 0, bad `rnd` bounds |
+| `"args"` | unknown label, same argument by position and by label, unknown key name |
+| `"iteration"` | object keys added or removed during `for ... in` |
+| `"must_use"` | armed error dropped at scope end, or overwritten |
+| `"oom"` | heap exhausted |
+| `"stack_overflow"` | more than 4096 value stack slots or 256 nested calls |
+
+Messages use the type names `num`, `str`, `bool`, `nil`, `arr`, `obj`, `fn` and `err`, as in "expected num, got str".
 
 ### Returning Values and Errors
 
@@ -1574,13 +1630,19 @@ save(state)    // fire and forget
 
 ### Must-Use
 
-An error must not be silently forgotten *after you have committed to handling it*. When a binding receives a non-`nil` error value (via `?:`, plain bind, or a `case` capture), that binding is **armed**. An armed error must be **handled before the end of its enclosing block's scope**, or the program panics.
+An error must not be silently forgotten *after you have committed to handling it*. Only **variables** are ever armed. A variable is **armed** when an error is stored into it:
 
-Handling means any of:
-- **reading** it (`e.message`, passing it to a function),
+- by declaration: `x : f()`, `v, e ?: f()`, a destructured variable, or a loop variable (`for e in errors` arms `e` on each iteration)
+- by assignment: `x = f()`
+
+Parameters are never armed, and neither are array elements or object fields. An armed variable must be **handled before the end of its enclosing block's scope** (including a function return, `stop` or `next` leaving the scope), or the program panics with kind `"must_use"`.
+
+Handling means any **read** of the variable:
+- using it (`e.message`, passing it to a function, storing it in an array or object, copying it to another variable),
 - **presence-testing** it (`e?`),
-- **forwarding** it (`err e`),
-- **explicitly discarding** it (`_`).
+- **forwarding** it (`err e`).
+
+So `x : e` handles `e` and arms `x`, and `log(e)` handles `e` without arming the parameter inside `log`. Discarding with `_` (`v, _ ?: f()`) never binds the error at all.
 
 ```
 do
@@ -1599,16 +1661,18 @@ end                        // ok
 
 The deliberate hole: never *binding* the error in the first place (mode 4, the bare call) is fine. Must-use catches *forgetting after committing*, not *never committing*.
 
+Armed top-level variables are checked once, when top-level code finishes and before the engine calls `init()`. The REPL skips this check, so `x : load("slot1")` can be inspected on the next line.
+
 ### Clobber
 
-Rebinding another error onto a binding that still holds an **armed, unhandled** error panics at the rebinding line, as you would be discarding the first error unnoticed:
+Assigning anything (another error, `nil`, `5`) to a variable that still holds an **armed, unhandled** error panics with kind `"must_use"` at that line, as you would be discarding the first error unnoticed:
 
 ```
 v, e ?: first()
-v, e ?: second()    // PANIC if e from first() was never handled
+e = second()    // PANIC if e from first() was never handled
 ```
 
-Handle the first error before reusing the binding.
+Handle the first error before reusing the variable. To discard one deliberately, read it first (`case e? -> ...`). Redeclaring `v, e ?:` in the same block is a compile error like any redeclaration, so clobbering only happens through assignment.
 
 ### `catch`
 
@@ -1621,11 +1685,13 @@ end
 case e? -> log(e)
 ```
 
-`catch` is the same machinery the host applies around each lifecycle frame, the per-frame wrapper is simply an implicit outermost `catch` that drives the error overlay. Reach for an explicit `catch` only at real boundaries (a plugin, a subsystem, a frame); routine failure should use error values, not panics.
+`catch` is the same machinery the engine applies around each `tick` and `draw`: an implicit outermost `catch` that drives the crash screen. Reach for an explicit `catch` only at real boundaries (a plugin, a subsystem, a frame); routine failure should use error values, not panics.
+
+`catch do ... end` is a control-flow boundary: a `stop`, `next` or `ret` that would jump out of it is a parse error. Compute a value inside and act on it afterwards. The hang guard is not a panic and can't be caught.
 
 ## Strings
 
-Strings are **mutable** and **1-indexed**. Individual characters can be read and written via index access.
+Strings are **1-indexed** sequences of bytes in the **Noka charset**: byte 10 is the newline, bytes 32 to 126 are ASCII, and the remaining values are the console font's icon glyphs (see CONSOLE.md). Every byte is one character and one glyph, so `len`, `s[i]`, `ord` and `char` work on bytes. Source files are UTF-8: the compiler converts each string literal's characters to charset bytes, and a character with no charset equivalent (an emoji, for example) is a compile error, "character not in the Noka charset".
 
 ```
 s : "hello"
@@ -1634,11 +1700,19 @@ print(s[-1])    // "o" (negative indexing)
 s[1] = "H"      // "Hello"
 ```
 
-Indexing returns a single-character string. Assigning to an index replaces that character. Strings declared with `#` are frozen and cannot be mutated.
+**Strings are values.** Each binding holds its own string: after `t : s` and `s[1] = "H"`, `t` is unchanged, and passing a string to a function never lets the callee change the caller's string. Arrays and objects are shared; strings are values.
+
+Indexing returns a one-character string. Assigning to an index replaces that character, which behaves exactly like rebinding `s` to a changed copy, including through fields and indices (`player.name[1] = "N"` gives `player.name` a new string).
+
+- The right-hand side must be exactly one character, so `s[1] = "HE"` and `s[1] = ""` panic. Use `sub` and `+` to splice.
+- Positions follow the array rules: `s[len + 1] = c` appends, and `s[0]`, fractional indices and writes further out panic.
+- A literal always evaluates to the same unchanging string, so `fn f() "abc" end` always returns `"abc"`.
+
+A string declared with `#` is a constant binding, so its characters can't be assigned:
 
 ```
 name # "noka"
-name[1] = "N"    // RUNTIME ERROR (frozen)
+name[1] = "N"    // PANIC (frozen)
 ```
 
 ## Arrays
@@ -1662,7 +1736,7 @@ print(nums[1])    // 10 (1-indexed)
 print(nums[3])    // 30
 ```
 
-Missing indices return `nil`.
+Reading past either end returns `nil`. `nums[0]` panics ("arrays are 1-based, index 0 is invalid"), and so does a fractional index. Both panic with kind `"index"`.
 
 ### Negative Indexing
 
@@ -1682,12 +1756,16 @@ items[1] = "sword"
 push(items, "shield")
 ```
 
+Writing at `len + 1` appends. Any write further out panics: `a[len + 2]`, `a[0]`, a fractional index, or a negative index past the start. Arrays never grow from an out-of-range write, so a mistyped index can't silently allocate.
+
 ### Length
 
 ```
 items : [10, 20, 30]
 print(len(items))    // 3
 ```
+
+`nil` is an ordinary element, and arrays store their length, so `len([1, nil, 3])` is 3.
 
 ### Array Spread
 
@@ -1712,6 +1790,8 @@ addItem(items, "shield")
 print(len(items))    // 2
 ```
 
+Arrays and objects are shared by reference. Strings are not: they are values, so a function can never change a caller's string (see [Strings](#strings)).
+
 ## Objects
 
 String-keyed maps.
@@ -1727,7 +1807,7 @@ name : "noka"
 ver : 2
 info : {name, ver}    // equivalent to {name: "noka", ver: 2}
 
-// String-literal keys (for keys with spaces, punctuation, or reserved words)
+// String-literal keys (for keys with spaces or punctuation)
 config : {"max-hp": 100, "save path": "disc0"}
 print(config["max-hp"])
 
@@ -1735,7 +1815,7 @@ print(config["max-hp"])
 empty : {}
 ```
 
-Keys may be identifiers or string literals. Identifier keys become string keys of the same name. Computed keys (`[expr]: value`) are not supported.
+Keys may be identifiers, keywords (`{next: 1}`), or string literals. Identifier and keyword keys become string keys of the same name. Shorthand (`{name}`) needs an identifier, not a keyword. Computed keys (`[expr]: value`) are not supported. A key given `nil` isn't stored: `{a: nil}` has no key `a`.
 
 ### Accessing Values
 
@@ -1745,7 +1825,11 @@ print(info.name)       // noka
 print(info["name"])    // noka (equivalent)
 ```
 
-Missing keys return `nil`.
+Missing keys return `nil`. Wrong-type access panics:
+
+- field access on a non-object (`5.x`, `nil.x`, `true.x`)
+- named fields on an array (`arr.x`)
+- non-string keys on an object (`obj[1]`)
 
 ### Setting Values
 
@@ -1754,6 +1838,8 @@ info : {}
 info.name = "noka"
 info["ver"] = 2
 ```
+
+Assigning `nil` deletes the key: after `info.name = nil`, `"name" in info` is `false` and `len(info)` doesn't count it. This is the only way to remove a key.
 
 ### Object Spread
 
@@ -1854,7 +1940,7 @@ end
 A pattern parameter destructures its argument on call. Defaults work:
 
 ```
-fn draw([x, y], opts: {w: 8, h: 8})
+fn box([x, y], opts: {w: 8, h: 8})
   rectf(x, y, opts.w, opts.h)
 end
 ```
@@ -1891,17 +1977,23 @@ end
 
 ## Built-in Functions
 
-All built-ins are flat globals. They are highlighted in frost/cyan in the editor.
+All built-ins are flat globals, highlighted in azure in the editor. They are constant globals declared before the program starts, so the ordinary scope rules apply:
+
+- Redeclaring one at top level is an error: "`len` is a built-in".
+- Assigning to one is an error: "cannot assign to built-in `len`".
+- Shadowing one inside a function or block is allowed.
+
+Names like `map`, `time` and `color` are therefore unavailable as top-level variables. Built-ins don't count toward a program's 1024 top-level names. Built-ins accept labelled arguments using the parameter names shown below (`rectf(x, y, h: 16)`).
 
 ### Core
 
 | Function       | Description                                      |
 |---------------|--------------------------------------------------|
-| `print(v)`    | Output a value                                   |
-| `type(v)`     | Returns type as string: `"num"`, `"str"`, `"boo"`, `"nil"`, `"arr"`, `"obj"`, `"fn"`, `"err"` |
+| `print(v)`    | Write a value as a line to the console terminal (the shell's transcript). Never draws on the screen; use `text` for that. |
+| `type(v)`     | Returns type as string: `"num"`, `"str"`, `"bool"`, `"nil"`, `"arr"`, `"obj"`, `"fn"`, `"err"` |
 | `tostr(v)`    | Converts any value to string (see String Representations) |
-| `tonum(v)`    | Converts string/number to number, or `nil`       |
-| `len(v)`      | Length of string, array, or object (key count)   |
+| `tonum(v)`    | Converts a string to a number using the number-literal grammar (decimal, `0x`, `0b`) with an optional leading `-`, ignoring surrounding whitespace: `tonum("0xFF")` is `255`. Exponents (`"1e3"`) and `""` give `nil`. A number passes through; any other type gives `nil`. |
+| `len(v)`      | Length of string (bytes), array, or object (key count) |
 | `error(msg, kind, data)` | Construct an `error` (`kind` defaults to `"error"`, `data` optional) |
 
 ### Math
@@ -1918,7 +2010,10 @@ All built-ins are flat globals. They are highlighted in frost/cyan in the editor
 | `clamp(v, lo, hi)` | Constrain value to range               |
 | `lerp(a, b, t)`  | Linear interpolation                     |
 | `sqrt(n)`        | Square root                              |
-| `rnd(lo, hi)`    | Random integer from lo to hi (inclusive)  |
+| `rnd(n)`         | Random integer from 1 to `n`, so `rnd(6)` is a die roll |
+| `rnd(lo, hi)`    | Random integer from `lo` to `hi` (inclusive) |
+| `rnd()`          | Random float in [0, 1)                   |
+| `seed(n)`        | Fix the random sequence (same seed, same sequence) |
 | `sin(n)`         | Sine (radians)                           |
 | `cos(n)`         | Cosine (radians)                         |
 | `tan(n)`         | Tangent (radians)                        |
@@ -1926,19 +2021,23 @@ All built-ins are flat globals. They are highlighted in frost/cyan in the editor
 | `acos(n)`        | Inverse cosine                           |
 | `atan2(y, x)`    | Angle from origin to point               |
 
+Each program has its own deterministic random generator, seeded randomly when the program starts. Non-integer bounds, or `lo > hi`, panic with kind `"math"`.
+
 ### String
 
 | Function            | Description                                        |
 |--------------------|----------------------------------------------------|
-| `sub(v, i, j)`     | Substring or subarray from i to j (1-indexed, inclusive) |
-| `upper(s)`         | Uppercase                                          |
-| `lower(s)`         | Lowercase                                          |
+| `sub(v, i, j)`     | Substring or subarray from `i` to `j` (1-indexed, inclusive). `j` is optional and defaults to the end. Negative indices count from the end. Out-of-range bounds clamp (`sub("abc", 2, 99)` is `"bc"`), and `i > j` after clamping gives an empty result. A bound of 0 or a fractional bound panics with `"index"`. |
+| `upper(s)`         | Uppercase (ASCII letters only)                     |
+| `lower(s)`         | Lowercase (ASCII letters only)                     |
 | `find(v, pat)`     | Find first occurrence in string or array, returns index (1-based) or nil |
 | `split(s, sep)`    | Split string into array                            |
 | `trim(s)`          | Remove leading/trailing whitespace                 |
 | `replace(s, old, new)` | Replace all occurrences of old with new        |
-| `char(n)`          | Number to character                                |
-| `ord(s)`           | First character to number                          |
+| `char(n)`          | Character for code `n` (0 to 255; outside panics with `"index"`) |
+| `ord(s)`           | Code of the first character (`ord("A")` is 65)     |
+
+Character codes are encoding values in the Noka charset (ASCII for 32 to 126), not names, so they start at 0.
 
 ### Array
 
@@ -1949,49 +2048,84 @@ All built-ins are flat globals. They are highlighted in frost/cyan in the editor
 | `shift(arr)`          | Remove and return first value                |
 | `insert(arr, i, v)`   | Insert value at index, returns `arr`         |
 | `remove(arr, i)`      | Remove value at index, returns `arr`         |
-| `sort(arr [, cmp])`   | Return **new** sorted array, optional comparator |
+| `sort(arr, cmp)`      | Return a **new** stably sorted array. Without `cmp`, numbers sort ascending and strings bytewise (uppercase first); a mix of types or any other type panics with `"type"`. `cmp(a, b)` returns `true` when `a` goes before `b`. |
 | `reverse(arr)`        | Return **new** reversed array                |
-| `map(arr, fn)`        | Return new array with fn(v) or fn(v, i) applied |
-| `filter(arr, fn)`     | Return new array where fn(v) or fn(v, i) is true |
-| `pick(arr)`           | Return random element                        |
+| `each(arr, fn)`       | Return new array of `fn(v, i)` for each element |
+| `filter(arr, fn)`     | Return new array of the elements where `fn(v, i)` is true |
+| `pick(arr)`           | Return a random element, or `nil` for an empty array |
 | `keys(obj)`           | Return array of object keys                  |
 | `vals(obj)`           | Return array of object values                |
-| `concat(arr, sep)`    | Join array elements into string              |
+| `concat(arr, sep)`    | Join elements into a string, passing each through `tostr`. `sep` defaults to `""`: `concat([1, true, "a"], ",")` is `"1,true,a"`. |
+
+`each` and `filter` always pass `(v, i)`; a callback that declares only `v` ignores `i`. For case-insensitive sorting, compare lowercased strings:
+
+```
+sort(names, fn(a, b) lower(a) < lower(b))
+```
 
 ### System
 
-| Function          | Description                              |
+| Name              | Description                              |
 |------------------|------------------------------------------|
 | `exit()`         | Exit current program                     |
 | `get_arg(n)`     | Get launch argument by index (1-based)   |
-| `mem()`          | Current memory usage                     |
-| `time()`         | Current time                             |
+| `mem()`          | Bytes in use in the program's 131072-byte heap |
+| `time()`         | Seconds since the program started, counted in frames (0 during top-level code and `init`, +1/60 per `tick`). Never reads the device clock. |
+| `cpu()`          | Last frame's `tick` + `draw` time as a fraction of 1/60 s (above 1 means frames are dropping into slow motion). Wall-clock time, so it varies by device and run: **for display only**, since using it in game logic breaks replays. |
+| `dt`             | Constant: 1/60, the seconds per `tick`   |
 
 ### Display
 
+Display functions draw into the program's 192×224 screen.
+
 | Function                      | Description                        |
 |------------------------------|------------------------------------|
-| `cls()`                       | Clear screen                       |
-| `color(c)`                    | Set draw color                     |
-| `print_at(s, x, y)`          | Print string at position           |
-| `rect(x, y, w, h)`           | Draw rectangle outline             |
-| `rectf(x, y, w, h)`          | Draw filled rectangle              |
-| `circ(x, y, r)`              | Draw circle outline                |
-| `circf(x, y, r)`             | Draw filled circle                 |
-| `line(x1, y1, x2, y2)`       | Draw line                          |
-| `pset(x, y)`                 | Set pixel                          |
-| `pget(x, y)`                 | Get pixel color                    |
-| `spr(n, x, y)`               | Draw sprite                        |
-| `camera(x, y)`               | Offset all draw calls              |
-| `clip(x, y, w, h)`           | Set clipping region                |
+| `cls(c)`                      | Clear screen                       |
+| `color(c)`                    | Set the current draw color         |
+| `text(s, x, y, c)`            | Draw a string with the console font. `\n` moves down 8 px to the starting `x`. Returns the `x` after the last character. |
+| `rect(x, y, w, h, c)`         | Draw rectangle outline             |
+| `rectf(x, y, w, h, c)`        | Draw filled rectangle              |
+| `circ(x, y, r, c)`            | Draw circle outline                |
+| `circf(x, y, r, c)`           | Draw filled circle                 |
+| `line(x1, y1, x2, y2, c)`     | Draw line                          |
+| `pset(x, y, c)`               | Set pixel                          |
+| `pget(x, y)`                  | Get pixel color, or `nil` off-screen |
+| `spr(n, x, y, w: 1, h: 1, fx: false, fy: false)` | Draw sprite `n` (1 to 256). `w` and `h` are in sprites; `fx`/`fy` flip. |
+| `map(cx: 1, cy: 1, x: 0, y: 0, w: 24, h: 28)` | Draw `w`×`h` tilemap cells starting at map cell (`cx`, `cy`), with the top-left at pixel (`x`, `y`). Empty tiles are skipped. |
+| `mget(cx, cy)`                | Sprite number at a map cell, or `nil` for an empty tile or a cell off the 128×64 map |
+| `mset(cx, cy, n)`             | Set a map cell's sprite; `nil` clears it. Off the map panics with `"index"`. |
+| `sget(x, y)`                  | Color of a sprite-sheet pixel (128×128), or `nil` off the sheet |
+| `sset(x, y, c)`               | Set a sprite-sheet pixel (off the sheet is ignored) |
+| `pal(c, rgb)`                 | Set color `c` to `0xRRGGBB`, snapped to the 15-bit ladder. `pal(c)` resets one color to DHARM32 and `pal()` resets all. |
+| `palt(c, on)`                 | Set or clear color `c`'s transparent bit |
+| `gget(code, x, y)`            | Whether a font glyph pixel is on (`code` 0 to 255, `x` and `y` 0 to 7) |
+| `gset(code, x, y, on)`        | Set a font glyph pixel; letters and digits can be redrawn like any glyph |
+| `camera(x, y)`                | Offset all draw calls; `camera()` resets it |
+| `clip(x, y, w, h)`            | Set the clipping rectangle; `clip()` resets it to the full screen |
+
+Display rules:
+
+- **Numbering:** numbers that name a thing start at 1 (colors 1 to 32, sprites 1 to 256, map cells), while pixel coordinates start at 0: `pset(0, 0)` is the top-left pixel, and the screen spans x 0 to 191 and y 0 to 223.
+- **Colors:** the trailing `c` is optional and defaults to the current draw color without changing it. A color is floored; a non-number panics with `"type"`, and anything outside 1 to 32 panics with `"index"`. A program starts with draw color 7 (cyan), and color 1 is transparent by default.
+- **Coordinates:** every coordinate and size argument is floored, and `camera` values are floored when set.
+- **Clipping:** drawing outside the screen or the clip rectangle is clipped silently. A rectangle with `w` or `h` of 0 or less, or a circle with `r` below 0, draws nothing.
+- **Transparency:** `spr` and `map` skip pixels whose color has the transparent bit set (see `palt`).
+- **Palette:** a `pal` change recolors the whole screen, including pixels drawn earlier in the frame, because the screen stores color numbers.
 
 ### Input
 
-| Function    | Description                              |
-|------------|------------------------------------------|
-| `key(k)`   | Is key currently held?                   |
-| `keyp(k)`  | Was key just pressed this frame?         |
+| Function         | Description                              |
+|-----------------|------------------------------------------|
+| `key(k)`        | Is button `k` currently held?            |
+| `keyp(k)`       | Was button `k` pressed this frame? (first frame only, no repeat) |
+| `typed()`       | Next entry from the text keyboard, or `nil` |
+| `keyboard(mode)` | Show the gamepad (`"pad"`) or the text keyboard (`"text"`) |
+| `touch()`       | `{x, y}` in screen pixels while a finger is on the screen, otherwise `nil` |
+| `touchp()`      | Like `touch()`, but only on the first frame of a touch |
 
+Buttons are `"up"`, `"down"`, `"left"`, `"right"`, `"a"`, `"b"`, `"x"`, `"y"`, and `"start"`. Any other name panics with kind `"args"`, so a typo can't silently read `false`. The console's menu button suspends the running disc and can't be read by discs.
+
+`typed()` returns characters as one-character strings in the Noka charset, and editing keys as names: `"backspace"`, `"enter"`, `"tab"`, `"left"`, `"right"`, `"up"`, `"down"`, `"select"`, `"copy"`, `"cut"`, `"paste"`. Discs start with the gamepad showing.
 
 ## Runtime Behavior
 
@@ -2049,14 +2183,30 @@ Only named declarations are hoisted; `:` / `#` bindings holding anonymous functi
 | Value                  | Output              |
 |------------------------|---------------------|
 | `42`                   | `42`                |
+| `0.1 + 0.2`            | `0.3`               |
+| `1e21`                 | `1e+21`             |
+| `-0`                   | `0`                 |
 | `"hello"`              | `hello`             |
 | `true`                 | `true`              |
 | `nil`                  | `nil`               |
 | `[1, 2, 3]`           | `[1, 2, 3]`         |
 | `{name: "noka"}`      | `{name: "noka"}`    |
-| `fn() ... end`      | `<fn>`        |
+| `{"max-hp": 100}`     | `{"max-hp": 100}`   |
+| `fn greet() ... end`  | `<fn greet>`        |
+| `fn() ... end`        | `<fn>`              |
+| `error("eof", "io")`  | `<error io: eof>`   |
 
-Strings inside arrays/objects are quoted with escaped inner quotes.
+- **Numbers:** whole numbers below 2^53 print as plain digits. Anything else prints with up to 14 significant digits, switching to exponent form when needed (Lua's `%.14g`). `nan`, `inf` and `-inf` print as written. `tonum(tostr(x))` may differ from `x` in the last bits.
+- **Strings** print unquoted at the top level. Inside arrays and objects they are double-quoted, with `"`, `\` and newlines escaped as in literals.
+- **Object keys** print bare when they could be written bare in source (identifiers and keywords) and quoted otherwise. Separators are `, ` and `: `, so the output is valid literal syntax.
+- **Functions** print `<fn name>` when named and `<fn>` when anonymous, bound methods the same way. **Errors** print `<error kind: message>`.
+- A value that contains itself prints the inner occurrence as `[...]` or `{...}`.
+
+### REPL
+
+The shell's REPL keeps its top-level names from line to line, and a top-level redeclaration stays an error, as in any program. `reset` clears them. The REPL also resets automatically when it runs out of heap or out of top-level names, and the shell says so. A line that panics leaves the REPL alive and keeps everything earlier lines defined. The top-level must-use check doesn't run in the REPL.
+
+While a disc is suspended (menu button), REPL lines run inside the disc, so `print(player.hp)` and `player.hp = 99` act on its live state. Nothing typed there changes the disc's source, and stopping the disc discards it all.
 
 ### Error Reporting
 
@@ -2069,22 +2219,24 @@ Scan and parse errors are reported before the program runs:
 
 At runtime there are two distinct failure channels (see
 [Error Handling](#error-handling)):
-- **Panic:** unrecoverable bugs (type errors, undefined variables, division by zero, must-use violations). A panic unwinds to the nearest `catch`; if none, the host's per-frame wrapper reports it on the error overlay, showing the real runtime type.
+- **Panic:** unrecoverable bugs (type errors, undefined variables, division by zero, must-use violations). A panic unwinds to the nearest `catch`; if none, the engine stops the program and the crash screen shows it, with the real runtime type.
 - **error values:** recoverable failures, threaded explicitly through `ret` / `err` and the `?:` split.
 
 ## Syntax Highlighting
 
-| Token Category | Color Name | Hex       |
-|----------------|------------|-----------|
-| Keyword        | amber      | `#CCAA33` |
-| Number         | deep blue  | `#4488FF` |
-| String         | verdant    | `#44CC66` |
-| Boolean        | violet     | `#9944FF` |
-| Nil            | ash        | `#6A6A78` |
-| Comment        | ash        | `#6A6A78` |
-| Operator       | bone       | `#C8C4B8` |
-| Built-in       | frost      | `#88DDFF` |
-| Identifier     | bone       | `#C8C4B8` |
+The in-console editor colors source with DHARM32 colors (numbers as in CONSOLE.md), the same theme as the tour's dark mode:
+
+| Token Category | Color |
+|----------------|-------|
+| Background     | 11 spruce |
+| Keyword        | 28 coral |
+| Atom (`true`, `false`, `nil`) | 17 amber |
+| Number         | 14 grass |
+| String         | 16 lemon |
+| Comment        | 3 slate |
+| Operator       | 7 cyan |
+| Built-in       | 8 azure |
+| Identifier     | 5 ice |
 
 ## Example Programs
 
@@ -2140,19 +2292,19 @@ print(c())    // 3
 ```
 x : 0
 y : 0
-speed # 60
+speed # 60    // pixels per second
 
-init()
+fn init()
   x = 100
   y = 100
 end
 
-tick(dt)
+fn tick()
   case key("left") -> x -= speed * dt
   case key("right") -> x += speed * dt
 end
 
-draw()
+fn draw()
   cls()
   rectf(x, y, 8, 8)
 end
@@ -2214,11 +2366,11 @@ print(show())      // noka: 110hp
 nums : [1, 2, 3, 4, 5]
 
 // Without captures
-doubled : map(nums, fn(x) x * 2)
+doubled : each(nums, fn(x) x * 2)
 positive : filter(nums, fn(x) x > 0)
 
 // With captures
-doubled : map(nums, mul(2, _))
+doubled : each(nums, mul(2, _))
 positive : filter(nums, greater(_, 0))
 
 // Capture in sort
@@ -2227,26 +2379,26 @@ sorted : sort(items, less(_, _))
 
 ### Labelled Arguments
 ```
-fn rect(x, y, w: 8, h: 8)
+fn box(x, y, w: 8, h: 8)
   rectf(x, y, w, h)
 end
 
-rect(10, 20)              // defaults
-rect(10, 20, w: 16)       // override w
-rect(10, 20, h: 16)       // override h
-rect(10, , w: 4, h: 4)    // skip y
+box(10, 20)              // defaults
+box(10, 20, w: 16)       // override w
+box(10, 20, h: 16)       // override h
+box(10, , w: 4, h: 4)    // skip y
 ```
 
 ### Loop Return Values
 ```
 // Find first match
-fn find(arr, val)
+fn index_of(arr, val)
   for i, v in arr
     case v == val -> stop i
   end
 end
 
-idx : find([10, 20, 30], 20)
+idx : index_of([10, 20, 30], 20)
 print(idx)    // 2
 ```
 
