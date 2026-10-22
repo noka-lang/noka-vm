@@ -1,0 +1,59 @@
+{
+  "machine": "Apple M1 Pro, darwin arm64",
+  "date": "2026-10-22T08:04:21.420Z",
+  "runs": 5,
+  "results": {
+    "case_loop": {
+      "iterations": 2000000,
+      "native": {
+        "min_ns": 244789000,
+        "median_ns": 245137167,
+        "ns_per_iteration": 122.39
+      },
+      "wasm": {
+        "min_ns": 330696167,
+        "median_ns": 332151334,
+        "ns_per_iteration": 165.35
+      }
+    },
+    "globals": {
+      "iterations": 2000000,
+      "native": {
+        "min_ns": 101174375,
+        "median_ns": 101433667,
+        "ns_per_iteration": 50.59
+      },
+      "wasm": {
+        "min_ns": 132675958,
+        "median_ns": 133188583,
+        "ns_per_iteration": 66.34
+      }
+    },
+    "locals": {
+      "iterations": 2000000,
+      "native": {
+        "min_ns": 95747417,
+        "median_ns": 96469708,
+        "ns_per_iteration": 47.87
+      },
+      "wasm": {
+        "min_ns": 107626541,
+        "median_ns": 108205458,
+        "ns_per_iteration": 53.81
+      }
+    },
+    "while_loop": {
+      "iterations": 10000000,
+      "native": {
+        "min_ns": 350705375,
+        "median_ns": 356149417,
+        "ns_per_iteration": 35.07
+      },
+      "wasm": {
+        "min_ns": 463477916,
+        "median_ns": 464866416,
+        "ns_per_iteration": 46.35
+      }
+    }
+  }
+}

@@ -1,0 +1,8 @@
+// A bare `while` loop: compare, add, assign, jump.
+// iterations: 10000000
+// expect: 10000000
+i : 0
+while i < 10000000
+  i = i + 1
+end
+i

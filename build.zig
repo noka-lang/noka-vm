@@ -78,4 +78,34 @@ pub fn build(b: *std.Build) void {
     const sync_step = b.step("sync", "Build vm.wasm and copy it into a sibling nokascript checkout");
     sync_step.dependOn(&install_wasm.step);
     sync_step.dependOn(&sync.step);
+
+    // ---- zig build bench -----------------------------------------------------------------------
+    // Times bench/programs natively (ReleaseFast) and as the shipped vm.wasm (in Node), then
+    // compares against bench/baseline.json. Pass `-- --update` to rewrite the baseline.
+    const bench_runner = b.addExecutable(.{
+        .name = "bench-runner",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("bench/runner.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{
+                .name = "noka_vm",
+                .module = b.createModule(.{
+                    .root_source_file = b.path("src/vm.zig"),
+                    .target = target,
+                    .optimize = .ReleaseFast,
+                }),
+            }},
+        }),
+    });
+
+    const bench = b.addSystemCommand(&.{ "node", "bench/bench.mjs" });
+    bench.addArg("--runner");
+    bench.addArtifactArg(bench_runner);
+    bench.addArg("--wasm");
+    bench.addFileArg(wasm.getEmittedBin());
+    bench.addPassthruArgs();
+
+    const bench_step = b.step("bench", "Benchmark bench/programs natively and as vm.wasm against the baseline");
+    bench_step.dependOn(&bench.step);
 }

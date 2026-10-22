@@ -1,0 +1,12 @@
+// Local reads and writes inside a block.
+// iterations: 2000000
+// expect: 1999999000000
+do
+  i : 0
+  sum : 0
+  while i < 2000000
+    sum = sum + i
+    i = i + 1
+  end
+  sum
+end
