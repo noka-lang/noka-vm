@@ -99,43 +99,55 @@ const Machine = struct {
 
 // ---- exports -----------------------------------------------------------------------------------
 
-var default_machine: Machine = .{}; // TODO: replace this with handles (S4)
-
-export fn disc_ptr() [*]u8 {
-    return &default_machine.disc;
+export fn noka_new() ?*Machine {
+    return Machine.create();
 }
 
-export fn disc_cap() usize {
-    return default_machine.disc.len;
+export fn noka_free(m: *Machine) void {
+    m.destroy();
 }
 
-export fn init() void {
-    default_machine.reset();
+export fn noka_reset(m: *Machine) void {
+    m.reset();
+}
+
+export fn noka_disc_ptr(m: *Machine) [*]u8 {
+    return &m.disc;
+}
+
+export fn noka_disc_cap(m: *Machine) usize {
+    return m.disc.len;
 }
 
 // returns 0 on success, non-zero on error.
-// call `init()` before calling this.
-export fn eval(len: usize) i32 {
-    return default_machine.eval(len);
+export fn noka_eval(m: *Machine, len: usize) i32 {
+    return m.eval(len);
 }
 
 // returns 0 on success, non-zero on error.
-// call `init()` before calling this.
-export fn load_disc(len: usize) i32 {
-    return default_machine.loadDisc(len);
+export fn noka_load_disc(m: *Machine, len: usize) i32 {
+    return m.loadDisc(len);
 }
 
 pub fn interpretSource(source: []const u8) i32 {
-    default_machine.reset();
+    const m = Machine.create() orelse {
+        io.print("out of memory.\n");
+        return 1;
+    };
+    defer m.destroy();
 
-    return default_machine.compileAndRun(source);
+    return m.compileAndRun(source);
 }
 
 pub fn interpretDisc(image: []const u8) i32 {
-    default_machine.reset();
-    @memcpy(default_machine.disc[0..image.len], image);
+    const m = Machine.create() orelse {
+        io.print("out of memory.\n");
+        return 1;
+    };
+    defer m.destroy();
+    @memcpy(m.disc[0..image.len], image);
 
-    return default_machine.loadDisc(image.len);
+    return m.loadDisc(image.len);
 }
 
 // ---- VM ----------------------------------------------------------------------------------------
@@ -857,44 +869,59 @@ test "a machine made with create runs a program" {
 // ---- Disc tests --------------------------------------------------------------------------------
 
 test "eval rejects a length past the disc size" {
+    const m = noka_new() orelse return error.OutOfMemory;
+    defer noka_free(m);
+
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(@as(i32, 1), eval(default_machine.disc.len + 1));
+    try testing.expectEqual(@as(i32, 1), noka_eval(m, noka_disc_cap(m) + 1));
     try testing.expectEqualStrings("disc error: source too large.\n", io.captured());
 }
 
 test "load_disc rejects a length past the disc size" {
+    const m = noka_new() orelse return error.OutOfMemory;
+    defer noka_free(m);
+
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(@as(i32, 1), load_disc(default_machine.disc.len + 1));
+    try testing.expectEqual(@as(i32, 1), noka_load_disc(m, noka_disc_cap(m) + 1));
     try testing.expectEqualStrings("disc error: disc too large.\n", io.captured());
 }
 
 test "load_disc runs a disc's source" {
-    @memset(&default_machine.disc, 0);
-    const image = disc_mod.forgeDisc(&default_machine.disc, "1 + 2 * 3");
+    const m = noka_new() orelse return error.OutOfMemory;
+    defer noka_free(m);
+
+    @memset(&m.disc, 0);
+    const image = disc_mod.forgeDisc(&m.disc, "1 + 2 * 3");
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(@as(i32, 0), load_disc(image.len));
+    try testing.expectEqual(@as(i32, 0), noka_load_disc(m, image.len));
     try testing.expectEqualStrings("7\n", io.captured());
 }
 
 test "corrupt disc fails to run" {
-    @memset(&default_machine.disc, 0);
-    const image = disc_mod.forgeDisc(&default_machine.disc, "1 + 2 * 3");
+    const m = noka_new() orelse return error.OutOfMemory;
+    defer noka_free(m);
+
+    @memset(&m.disc, 0);
+    const image = disc_mod.forgeDisc(&m.disc, "1 + 2 * 3");
     @memcpy(image[0..4], "KANO");
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(@as(i32, 1), load_disc(image.len));
+    try testing.expectEqual(@as(i32, 1), noka_load_disc(m, image.len));
     try testing.expectEqualStrings("disc error: invalid magic header.\n", io.captured());
 }
 
 test "disc with no source fails to run" {
-    @memset(&default_machine.disc, 0);
-    const image = disc_mod.forgeDisc(&default_machine.disc, "1 + 2 * 3");
+    const m = noka_new() orelse return error.OutOfMemory;
+    defer noka_free(m);
+
+    @memset(&m.disc, 0);
+    const image = disc_mod.forgeDisc(&m.disc, "1 + 2 * 3");
     std.mem.writeInt(u16, image[0x16..0x18], 0, .little);
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(@as(i32, 1), load_disc(image.len));
+    try testing.expectEqual(@as(i32, 1), noka_load_disc(m, image.len));
     try testing.expectEqualStrings("disc error: disc has no source.\n", io.captured());
 }
