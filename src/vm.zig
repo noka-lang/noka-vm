@@ -398,7 +398,7 @@ const VM = struct {
                     };
 
                     self.machine.defineGlobal(name, self.pop(), mutability) catch |e| return switch (e) {
-                        error.AlreadyDecalred => self.runtimeError("'{s}' has already been declared", .{name.bytes}),
+                        error.AlreadyDeclared => self.runtimeError("'{s}' has already been declared", .{name.bytes}),
                         error.TooManyGlobals => self.runtimeError("globals limit exceeded", .{}),
                     };
                 },
