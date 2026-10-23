@@ -487,6 +487,11 @@ fn expectFailure(source: []const u8, expected: []const u8) !void {
     try testing.expectEqual(@as(i32, 1), code);
 }
 
+fn evalIn(m: *Machine, source: []const u8) i32 {
+    @memcpy(m.disc[0..source.len], source);
+    return noka_eval(m, source.len);
+}
+
 test "ignore spaces" {
     try expectOutput("2<3", "true");
     try expectOutput("2 < 3", "true");
@@ -870,6 +875,50 @@ test "a machine made with create runs a program" {
     try testing.expectEqualStrings("42\n", io.captured());
 }
 
+test "two machines keep separate globals" {
+    const a = noka_new() orelse return error.OutOfMemory;
+    defer noka_free(a);
+    const b = noka_new() orelse return error.OutOfMemory;
+    defer noka_free(b);
+
+    io.beginCapture();
+    defer io.endCapture();
+
+    // declare `x` in both machines, there should not be any redeclaration error
+    try testing.expectEqual(@as(i32, 0), evalIn(a, "x : 1"));
+    try testing.expectEqual(@as(i32, 0), evalIn(b, "x : 2"));
+    try testing.expectEqual(@as(i32, 0), evalIn(a, "y : \"only a\""));
+
+    io.beginCapture();
+    try testing.expectEqual(@as(i32, 0), evalIn(a, "x"));
+    try testing.expectEqual(@as(i32, 0), evalIn(b, "x"));
+    try testing.expectEqual(@as(i32, 0), evalIn(a, "y"));
+    try testing.expectEqualStrings("1\n2\nonly a\n", io.captured());
+
+    io.beginCapture();
+    try testing.expectEqual(@as(i32, 1), evalIn(b, "y"));
+    try testing.expectEqualStrings("runtime error: undefined variable 'y'.\n", io.captured());
+}
+
+test "resetting one machine leaves the other intact" {
+    const a = noka_new() orelse return error.OutOfMemory;
+    defer noka_free(a);
+    const b = noka_new() orelse return error.OutOfMemory;
+    defer noka_free(b);
+
+    io.beginCapture();
+    defer io.endCapture();
+
+    try testing.expectEqual(@as(i32, 0), evalIn(a, "x : \"from a\""));
+    try testing.expectEqual(@as(i32, 0), evalIn(b, "x : \"from b\""));
+    noka_reset(a);
+
+    io.beginCapture();
+    try testing.expectEqual(@as(i32, 1), evalIn(a, "x"));
+    try testing.expectEqual(@as(i32, 0), evalIn(b, "x"));
+    try testing.expectEqualStrings("runtime error: undefined variable 'x'.\nfrom b\n", io.captured());
+}
+
 // ---- Disc tests --------------------------------------------------------------------------------
 
 test "eval rejects a length past the disc size" {
@@ -928,4 +977,12 @@ test "disc with no source fails to run" {
     defer io.endCapture();
     try testing.expectEqual(@as(i32, 1), noka_load_disc(m, image.len));
     try testing.expectEqualStrings("disc error: disc has no source.\n", io.captured());
+}
+
+test "interpretDisc rejects an image past the disc size" {
+    const big: [disc_max + 1]u8 = @splat(0);
+    io.beginCapture();
+    defer io.endCapture();
+    try testing.expectEqual(@as(i32, 1), interpretDisc(&big));
+    try testing.expectEqualStrings("disc error: disc too large.\n", io.captured());
 }
