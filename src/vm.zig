@@ -145,6 +145,10 @@ pub fn interpretDisc(image: []const u8) i32 {
         return 1;
     };
     defer m.destroy();
+    if (image.len > disc_max) {
+        io.print("disc error: disc too large.\n");
+        return 1;
+    }
     @memcpy(m.disc[0..image.len], image);
 
     return m.loadDisc(image.len);
