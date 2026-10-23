@@ -30,6 +30,17 @@ const Machine = struct {
     globals: [globals_max]Global = undefined,
     globals_count: usize = 0,
 
+    fn create() ?*Machine {
+        const m = std.heap.page_allocator.create(Machine) catch return null;
+        m.* = .{};
+
+        return m;
+    }
+
+    fn destroy(self: *Machine) void {
+        std.heap.page_allocator.destroy(self);
+    }
+
     fn reset(self: *Machine) void {
         self.strings.reset();
         self.globals_count = 0;
@@ -829,6 +840,18 @@ test "next statement" {
 test "nested loops" {
     try expectOutput("count : 0\ni : 0\nwhile i < 3\n  i = i + 1\n  j : 0\n  while true\n    j = j + 1\n    count = count + 1\n    case j == 2 -> stop\n  end\nend\ncount", "6");
     try expectOutput("i : 0\nwhile i < 3\n  i = i + 1\n  while true\n    stop i\n  end\nend", "3");
+}
+
+// ---- Machine tests -----------------------------------------------------------------------------
+
+test "a machine made with create runs a program" {
+    const m = Machine.create() orelse return error.OutOfMemory;
+    defer m.destroy();
+
+    io.beginCapture();
+    defer io.endCapture();
+    try testing.expectEqual(@as(i32, 0), m.compileAndRun("x : 6\nx * 7"));
+    try testing.expectEqualStrings("42\n", io.captured());
 }
 
 // ---- Disc tests --------------------------------------------------------------------------------
