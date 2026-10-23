@@ -12,90 +12,9 @@ const Mutability = @import("compiler.zig").Mutability;
 const debug_print_bytecode = false;
 const debug_trace_execution = false;
 
-var heap_buffer: [1 << 20]u8 = undefined; // 1 MiB
-var fba = std.heap.FixedBufferAllocator.init(&heap_buffer);
-var disc: [64 * 1024]u8 = undefined; // 64 KiB, a disc's worth of source
-var string_table: strings.Strings = .{}; // TODO: move this into Machine (S2)
+// ---- machine -----------------------------------------------------------------------------------
 
-export fn disc_ptr() [*]u8 {
-    return &disc;
-}
-
-export fn disc_cap() usize {
-    return disc.len;
-}
-
-export fn init() void {
-    fba.reset();
-    string_table.reset();
-    globals_count = 0;
-}
-
-var chunk: Chunk = undefined;
-
-/// Compile and run the `len` bytes the host placed in `disc`.
-/// Returns 0 on success, non-zero on error.
-/// The host calls `init()` before calling this.
-export fn eval(len: usize) i32 {
-    if (len > disc.len) {
-        io.print("disc error: source too large.\n");
-        return 1;
-    }
-
-    return compileAndRun(disc[0..len]);
-}
-
-/// Load a disc from the host's `disc` buffer, interpreting its source.
-/// Returns 0 on success, non-zero on error.
-/// The host calls `init()` before calling this.
-export fn load_disc(len: usize) i32 {
-    if (len > disc.len) {
-        io.print("disc error: disc too large.\n");
-        return 1;
-    }
-
-    const header = disc_mod.parse(disc[0..len]) catch |e| {
-        io.printf("disc error: {s}.\n", .{disc_mod.describe(e)});
-        return 1;
-    };
-
-    const src = header.section(disc[0..len], .src) orelse {
-        io.print("disc error: disc has no source.\n");
-        return 1;
-    };
-
-    // TODO: handle the other sections
-
-    return compileAndRun(src);
-}
-
-/// Compile and run the given source code.
-pub fn interpretSource(source: []const u8) i32 {
-    init();
-
-    return compileAndRun(source);
-}
-
-pub fn interpretDisc(image: []const u8) i32 {
-    init();
-    @memcpy(disc[0..image.len], image);
-
-    return load_disc(image.len);
-}
-
-fn compileAndRun(source: []const u8) i32 {
-    chunk = Chunk{};
-
-    if (!Compiler.compile(source, &chunk, &string_table)) return 1;
-    if (debug_print_bytecode) debug.disassembleChunk(&chunk, "compiled code");
-
-    var vm = VM{ .chunk = &chunk };
-
-    return if (vm.run()) 0 else 1;
-}
-
-// ---- globals -----------------------------------------------------------------------------------
-
+const disc_max = 64 * 1024; // 64 KiB
 const globals_max = 256;
 
 const Global = struct {
@@ -104,20 +23,114 @@ const Global = struct {
     mutability: Mutability,
 };
 
-var globals: [globals_max]Global = undefined;
-var globals_count: usize = 0;
+const Machine = struct {
+    disc: [disc_max]u8 = undefined,
+    chunk: Chunk = .{},
+    strings: strings.Strings = .{},
+    globals: [globals_max]Global = undefined,
+    globals_count: usize = 0,
 
-fn findGlobal(name: *const strings.String) ?*Global {
-    for (globals[0..globals_count]) |*global| {
-        if (global.name == name) return global;
+    fn reset(self: *Machine) void {
+        self.strings.reset();
+        self.globals_count = 0;
     }
 
-    return null;
+    fn eval(self: *Machine, len: usize) i32 {
+        if (len > self.disc.len) {
+            io.print("disc error: source too large.\n");
+            return 1;
+        }
+
+        return self.compileAndRun(self.disc[0..len]);
+    }
+
+    fn loadDisc(self: *Machine, len: usize) i32 {
+        if (len > self.disc.len) {
+            io.print("disc error: disc too large.\n");
+            return 1;
+        }
+
+        const image = self.disc[0..len];
+        const header = disc_mod.parse(image) catch |e| {
+            io.printf("disc error: {s}.\n", .{disc_mod.describe(e)});
+            return 1;
+        };
+
+        const src = header.section(image, .src) orelse {
+            io.print("disc error: disc has no source.\n");
+            return 1;
+        };
+
+        // TODO: handle the rest of the disc sections
+
+        return self.compileAndRun(src);
+    }
+
+    fn compileAndRun(self: *Machine, source: []const u8) i32 {
+        self.chunk = .{};
+
+        if (!Compiler.compile(source, &self.chunk, &self.strings)) return 1;
+        if (debug_print_bytecode) debug.disassembleChunk(&self.chunk, "compiled code");
+
+        var vm = VM{ .machine = self, .chunk = &self.chunk };
+
+        return if (vm.run()) 0 else 1;
+    }
+
+    fn findGlobal(self: *Machine, name: *const strings.String) ?*Global {
+        for (self.globals[0..self.globals_count]) |*global| {
+            if (global.name == name) return global;
+        }
+
+        return null;
+    }
+};
+
+// ---- exports -----------------------------------------------------------------------------------
+
+var default_machine: Machine = .{}; // TODO: replace this with handles (S4)
+
+export fn disc_ptr() [*]u8 {
+    return &default_machine.disc;
+}
+
+export fn disc_cap() usize {
+    return default_machine.disc.len;
+}
+
+export fn init() void {
+    default_machine.reset();
+}
+
+// returns 0 on success, non-zero on error.
+// call `init()` before calling this.
+export fn eval(len: usize) i32 {
+    return default_machine.eval(len);
+}
+
+// returns 0 on success, non-zero on error.
+// call `init()` before calling this.
+export fn load_disc(len: usize) i32 {
+    return default_machine.loadDisc(len);
+}
+
+pub fn interpretSource(source: []const u8) i32 {
+    default_machine.reset();
+
+    return default_machine.compileAndRun(source);
+}
+
+pub fn interpretDisc(image: []const u8) i32 {
+    default_machine.reset();
+    @memcpy(default_machine.disc[0..image.len], image);
+
+    return default_machine.loadDisc(image.len);
 }
 
 // ---- VM ----------------------------------------------------------------------------------------
 
 const VM = struct {
+    machine: *Machine,
     chunk: *const Chunk,
     ip: usize = 0,
     stack: [Chunk.stack_max]Value = undefined,
@@ -207,7 +220,7 @@ const VM = struct {
                     const a = self.pop();
 
                     if (a == .string and b == .string) {
-                        var builder = string_table.build();
+                        var builder = self.machine.strings.build();
                         builder.pushSlice(a.string.bytes);
                         builder.pushSlice(b.string.bytes);
 
@@ -344,25 +357,25 @@ const VM = struct {
                 .define_global, .define_const => {
                     const name = self.readConstant().string;
 
-                    if (findGlobal(name) != null) {
+                    if (self.machine.findGlobal(name) != null) {
                         return self.runtimeError("'{s}' has already been declared", .{name.bytes});
                     }
 
-                    if (globals_count >= globals_max) {
+                    if (self.machine.globals_count >= globals_max) {
                         return self.runtimeError("globals limit exceeded", .{});
                     }
 
-                    globals[globals_count] = .{ .name = name, .value = self.pop(), .mutability = switch (op) {
+                    self.machine.globals[self.machine.globals_count] = .{ .name = name, .value = self.pop(), .mutability = switch (op) {
                         .define_const => .constant,
                         .define_global => .mutable,
                         else => unreachable,
                     } };
 
-                    globals_count += 1;
+                    self.machine.globals_count += 1;
                 },
                 .get_global => {
                     const name = self.readConstant().string;
-                    const global = findGlobal(name) orelse {
+                    const global = self.machine.findGlobal(name) orelse {
                         return self.runtimeError("undefined variable '{s}'", .{name.bytes});
                     };
 
@@ -370,7 +383,7 @@ const VM = struct {
                 },
                 .set_global => {
                     const name = self.readConstant().string;
-                    const global = findGlobal(name) orelse {
+                    const global = self.machine.findGlobal(name) orelse {
                         return self.runtimeError("undefined variable '{s}'", .{name.bytes});
                     };
 
@@ -823,20 +836,20 @@ test "nested loops" {
 test "eval rejects a length past the disc size" {
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(@as(i32, 1), eval(disc.len + 1));
+    try testing.expectEqual(@as(i32, 1), eval(default_machine.disc.len + 1));
     try testing.expectEqualStrings("disc error: source too large.\n", io.captured());
 }
 
 test "load_disc rejects a length past the disc size" {
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(@as(i32, 1), load_disc(disc.len + 1));
+    try testing.expectEqual(@as(i32, 1), load_disc(default_machine.disc.len + 1));
     try testing.expectEqualStrings("disc error: disc too large.\n", io.captured());
 }
 
 test "load_disc runs a disc's source" {
-    @memset(&disc, 0);
-    const image = disc_mod.forgeDisc(&disc, "1 + 2 * 3");
+    @memset(&default_machine.disc, 0);
+    const image = disc_mod.forgeDisc(&default_machine.disc, "1 + 2 * 3");
     io.beginCapture();
     defer io.endCapture();
     try testing.expectEqual(@as(i32, 0), load_disc(image.len));
@@ -844,8 +857,8 @@ test "load_disc runs a disc's source" {
 }
 
 test "corrupt disc fails to run" {
-    @memset(&disc, 0);
-    const image = disc_mod.forgeDisc(&disc, "1 + 2 * 3");
+    @memset(&default_machine.disc, 0);
+    const image = disc_mod.forgeDisc(&default_machine.disc, "1 + 2 * 3");
     @memcpy(image[0..4], "KANO");
     io.beginCapture();
     defer io.endCapture();
@@ -854,8 +867,8 @@ test "corrupt disc fails to run" {
 }
 
 test "disc with no source fails to run" {
-    @memset(&disc, 0);
-    const image = disc_mod.forgeDisc(&disc, "1 + 2 * 3");
+    @memset(&default_machine.disc, 0);
+    const image = disc_mod.forgeDisc(&default_machine.disc, "1 + 2 * 3");
     std.mem.writeInt(u16, image[0x16..0x18], 0, .little);
     io.beginCapture();
     defer io.endCapture();
