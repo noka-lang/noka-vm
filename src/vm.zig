@@ -88,6 +88,14 @@ const Machine = struct {
         return if (vm.run()) 0 else 1;
     }
 
+    fn defineGlobal(self: *Machine, name: *const strings.String, value: Value, mutability: Mutability) error{ AlreadyDeclared, TooManyGlobals }!void {
+        if (self.findGlobal(name) != null) return error.AlreadyDeclared;
+        if (self.globals_count >= globals_max) return error.TooManyGlobals;
+
+        self.globals[self.globals_count] = .{ .name = name, .value = value, .mutability = mutability };
+        self.globals_count += 1;
+    }
+
     fn findGlobal(self: *Machine, name: *const strings.String) ?*Global {
         for (self.globals[0..self.globals_count]) |*global| {
             if (global.name == name) return global;
@@ -119,12 +127,12 @@ export fn noka_disc_cap(m: *Machine) usize {
     return m.disc.len;
 }
 
-// returns 0 on success, non-zero on error.
+/// Returns 0 on success, non-zero on error.
 export fn noka_eval(m: *Machine, len: usize) i32 {
     return m.eval(len);
 }
 
-// returns 0 on success, non-zero on error.
+/// Returns 0 on success, non-zero on error.
 export fn noka_load_disc(m: *Machine, len: usize) i32 {
     return m.loadDisc(len);
 }
@@ -383,22 +391,16 @@ const VM = struct {
                 },
                 .define_global, .define_const => {
                     const name = self.readConstant().string;
-
-                    if (self.machine.findGlobal(name) != null) {
-                        return self.runtimeError("'{s}' has already been declared", .{name.bytes});
-                    }
-
-                    if (self.machine.globals_count >= globals_max) {
-                        return self.runtimeError("globals limit exceeded", .{});
-                    }
-
-                    self.machine.globals[self.machine.globals_count] = .{ .name = name, .value = self.pop(), .mutability = switch (op) {
+                    const mutability: Mutability = switch (op) {
                         .define_const => .constant,
                         .define_global => .mutable,
                         else => unreachable,
-                    } };
+                    };
 
-                    self.machine.globals_count += 1;
+                    self.machine.defineGlobal(name, self.pop(), mutability) catch |e| return switch (e) {
+                        error.AlreadyDecalred => self.runtimeError("'{s}' has already been declared", .{name.bytes}),
+                        error.TooManyGlobals => self.runtimeError("globals limit exceeded", .{}),
+                    };
                 },
                 .get_global => {
                     const name = self.readConstant().string;
