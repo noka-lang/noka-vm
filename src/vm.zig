@@ -48,11 +48,12 @@ const Machine = struct {
         std.heap.page_allocator.destroy(self);
     }
 
-    /// Returns one memory map region of this machine's block
+    /// Returns one memory map region of this machine's block.
     fn region(self: *Machine, comptime r: memory.Region) *[r.size]u8 {
         return self.block[r.offset..][0..r.size];
     }
 
+    /// Returns a slice of slots of type T in the given region.
     fn slots(self: *Machine, comptime r: memory.Region, comptime T: type) *[r.size / @sizeOf(T)]T {
         return @ptrCast(@alignCast(self.region(r)));
     }
@@ -187,9 +188,8 @@ const VM = struct {
     stack: *[memory.stack_slots]Value,
     sp: usize = 0,
 
-    // Reject any chunk that needs more than `Chunk.stack_max` slots
     comptime {
-        std.debug.assert(Chunk.stack_max <= memory.stack_slots);
+        if (Chunk.stack_max > memory.stack_slots) @compileError("STACK must hold the largest chunk the compiler allows");
     }
 
     fn push(self: *VM, value: Value) void {

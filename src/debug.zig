@@ -17,12 +17,7 @@ pub fn disassembleChunk(chunk: *const Chunk, name: []const u8) void {
 /// Disassemble one instruction at `offset`, and return the offset of the next.
 pub fn disassembleInstruction(chunk: *const Chunk, offset: usize) usize {
     io.printf("{d:0>4} ", .{offset});
-    // TODO: put this back once line numbers are reimplemented
-    // if (offset > 0 and chunk.lines[offset] == chunk.lines[offset - 1]) {
-    //     io.print("    | ");
-    // } else {
-    //     io.printf(" {d: >4} ", .{offset});
-    // }
+    // TODO: put back line numbers
 
     const op: OpCode = @enumFromInt(chunk.code[offset]);
     return switch (op) {

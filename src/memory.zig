@@ -1,7 +1,7 @@
-//! This file represents the Noka Machine memory map.
+//! Noka Machine memory map.
 //!
 //! Every machine owns one 512 KiB block, and each region below lives at a fixed offset inside it.
-//! Hosts import these offsets as a source of truth.
+//! Hosts should import these offsets as a source of truth.
 
 const std = @import("std");
 const Value = @import("value.zig").Value;
