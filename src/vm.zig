@@ -25,7 +25,7 @@ const Global = struct {
 
 const Machine = struct {
     block: [memory.size]u8 align(16) = undefined,
-    chunk: Chunk = .{},
+    chunk: Chunk = undefined,
     strings: strings.Strings = .{},
     globals: [globals_max]Global = undefined,
     globals_count: usize = 0,
@@ -44,6 +44,10 @@ const Machine = struct {
     /// Returns one memory map region of this machine's block
     fn region(self: *Machine, comptime r: memory.Region) *[r.size]u8 {
         return self.block[r.offset..][0..r.size];
+    }
+
+    fn slots(self: *Machine, comptime r: memory.Region, comptime T: type) *[r.size / @sizeOf(T)]T {
+        return @ptrCast(@alignCast(self.region(r)));
     }
 
     fn reset(self: *Machine) void {
@@ -87,7 +91,7 @@ const Machine = struct {
     }
 
     fn compileAndRun(self: *Machine, source: []const u8) i32 {
-        self.chunk = .{};
+        self.chunk = .{ .code = self.region(memory.code), .constants = self.slots(memory.constants, Value) };
 
         if (!Compiler.compile(source, &self.chunk, &self.strings)) return 1;
         if (debug_print_bytecode) debug.disassembleChunk(&self.chunk, "compiled code");

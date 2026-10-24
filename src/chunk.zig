@@ -1,6 +1,6 @@
 const std = @import("std");
-
 const Value = @import("value.zig").Value;
+const memory = @import("memory.zig");
 
 // TODO: add remaining opcodes
 pub const OpCode = enum(u8) {
@@ -51,15 +51,14 @@ pub const OpCode = enum(u8) {
 };
 
 pub const Chunk = struct {
-    pub const code_max = 1 << 16; // 64 KiB of bytecode
-    pub const const_max = 1 << 12; // 4096 constant slots
+    pub const code_max = memory.code.size;
+    pub const const_max = memory.const_slots;
     pub const stack_max = 256;
 
-    code: [code_max]u8 = undefined,
+    code: *[code_max]u8,
     code_count: usize = 0,
-    constants: [const_max]Value = undefined,
+    constants: *[const_max]Value,
     const_count: usize = 0,
-    lines: [code_max]u32 = undefined,
     overflow: bool = false,
 
     pub fn writeByte(self: *Chunk, byte: u8) void {
