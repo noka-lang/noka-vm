@@ -32,6 +32,7 @@ const resultsPath = join(here, 'results.json');
 const threshold = 1.10;
 const luaDir = join(here, 'lua');
 const luaBar = { native: 3, wasm: 4 }; // max slowdown against Lua 5.4, per target
+const DISC = { offset: 0x00000, size: 0x10000 }; // from src/memory.zig, until layout.ts exists
 let midLine = false; // a progress line is waiting for its " done"
 
 const args = parseArgs(process.argv.slice(2));
@@ -144,9 +145,9 @@ async function loadWasm(path) {
       // A fresh machine per run, matching the native runner's interpretSource.
       const m = e.noka_new();
       if (!m) fail('vm.wasm is out of memory');
-      if (bytes.length > e.noka_disc_cap(m)) fail('program larger than the disc buffer');
+      if (bytes.length > DISC.size) fail('program larger than the disc buffer');
       // noka_new can grow memory, which detaches older views, so take the view after it.
-      new Uint8Array(memory.buffer, e.noka_disc_ptr(m), bytes.length).set(bytes);
+      new Uint8Array(memory.buffer, e.noka_memory(m) + DISC.offset, bytes.length).set(bytes);
       output = '';
       const status = e.noka_eval(m, bytes.length);
       e.noka_free(m);
