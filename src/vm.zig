@@ -8,13 +8,13 @@ const Value = @import("value.zig").Value;
 const disc_mod = @import("disc.zig");
 const strings = @import("strings.zig");
 const Mutability = @import("compiler.zig").Mutability;
+const memory = @import("memory.zig");
 
 const debug_print_bytecode = false;
 const debug_trace_execution = false;
 
 // ---- machine -----------------------------------------------------------------------------------
 
-const disc_max = 64 * 1024; // 64 KiB
 const globals_max = 256;
 
 const Global = struct {
@@ -24,7 +24,7 @@ const Global = struct {
 };
 
 const Machine = struct {
-    disc: [disc_max]u8 = undefined,
+    block: [memory.size]u8 align(16) = undefined,
     chunk: Chunk = .{},
     strings: strings.Strings = .{},
     globals: [globals_max]Global = undefined,
@@ -41,27 +41,36 @@ const Machine = struct {
         std.heap.page_allocator.destroy(self);
     }
 
+    /// Returns one memory map region of this machine's block
+    fn region(self: *Machine, comptime r: memory.Region) *[r.size]u8 {
+        return self.block[r.offset..][0..r.size];
+    }
+
     fn reset(self: *Machine) void {
         self.strings.reset();
         self.globals_count = 0;
     }
 
     fn eval(self: *Machine, len: usize) i32 {
-        if (len > self.disc.len) {
+        const disc = self.region(memory.disc);
+
+        if (len > disc.len) {
             io.print("disc error: source too large.\n");
             return 1;
         }
 
-        return self.compileAndRun(self.disc[0..len]);
+        return self.compileAndRun(disc[0..len]);
     }
 
     fn loadDisc(self: *Machine, len: usize) i32 {
-        if (len > self.disc.len) {
+        const disc = self.region(memory.disc);
+
+        if (len > disc.len) {
             io.print("disc error: disc too large.\n");
             return 1;
         }
 
-        const image = self.disc[0..len];
+        const image = disc[0..len];
         const header = disc_mod.parse(image) catch |e| {
             io.printf("disc error: {s}.\n", .{disc_mod.describe(e)});
             return 1;
@@ -119,12 +128,8 @@ export fn noka_reset(m: *Machine) void {
     m.reset();
 }
 
-export fn noka_disc_ptr(m: *Machine) [*]u8 {
-    return &m.disc;
-}
-
-export fn noka_disc_cap(m: *Machine) usize {
-    return m.disc.len;
+export fn noka_memory(m: *Machine) [*]u8 {
+    return &m.block;
 }
 
 /// Returns 0 on success, non-zero on error.
@@ -153,11 +158,11 @@ pub fn interpretDisc(image: []const u8) i32 {
         return 1;
     };
     defer m.destroy();
-    if (image.len > disc_max) {
+    if (image.len > memory.disc.size) {
         io.print("disc error: disc too large.\n");
         return 1;
     }
-    @memcpy(m.disc[0..image.len], image);
+    @memcpy(m.region(memory.disc)[0..image.len], image);
 
     return m.loadDisc(image.len);
 }
@@ -490,7 +495,7 @@ fn expectFailure(source: []const u8, expected: []const u8) !void {
 }
 
 fn evalIn(m: *Machine, source: []const u8) i32 {
-    @memcpy(m.disc[0..source.len], source);
+    @memcpy(m.region(memory.disc)[0..source.len], source);
     return noka_eval(m, source.len);
 }
 
@@ -929,7 +934,7 @@ test "eval rejects a length past the disc size" {
 
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(@as(i32, 1), noka_eval(m, noka_disc_cap(m) + 1));
+    try testing.expectEqual(@as(i32, 1), noka_eval(m, memory.disc.size + 1));
     try testing.expectEqualStrings("disc error: source too large.\n", io.captured());
 }
 
@@ -939,7 +944,7 @@ test "load_disc rejects a length past the disc size" {
 
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(@as(i32, 1), noka_load_disc(m, noka_disc_cap(m) + 1));
+    try testing.expectEqual(@as(i32, 1), noka_load_disc(m, memory.disc.size + 1));
     try testing.expectEqualStrings("disc error: disc too large.\n", io.captured());
 }
 
@@ -947,8 +952,8 @@ test "load_disc runs a disc's source" {
     const m = noka_new() orelse return error.OutOfMemory;
     defer noka_free(m);
 
-    @memset(&m.disc, 0);
-    const image = disc_mod.forgeDisc(&m.disc, "1 + 2 * 3");
+    @memset(m.region(memory.disc), 0);
+    const image = disc_mod.forgeDisc(m.region(memory.disc), "1 + 2 * 3");
     io.beginCapture();
     defer io.endCapture();
     try testing.expectEqual(@as(i32, 0), noka_load_disc(m, image.len));
@@ -959,8 +964,8 @@ test "corrupt disc fails to run" {
     const m = noka_new() orelse return error.OutOfMemory;
     defer noka_free(m);
 
-    @memset(&m.disc, 0);
-    const image = disc_mod.forgeDisc(&m.disc, "1 + 2 * 3");
+    @memset(m.region(memory.disc), 0);
+    const image = disc_mod.forgeDisc(m.region(memory.disc), "1 + 2 * 3");
     @memcpy(image[0..4], "KANO");
     io.beginCapture();
     defer io.endCapture();
@@ -972,8 +977,8 @@ test "disc with no source fails to run" {
     const m = noka_new() orelse return error.OutOfMemory;
     defer noka_free(m);
 
-    @memset(&m.disc, 0);
-    const image = disc_mod.forgeDisc(&m.disc, "1 + 2 * 3");
+    @memset(m.region(memory.disc), 0);
+    const image = disc_mod.forgeDisc(m.region(memory.disc), "1 + 2 * 3");
     std.mem.writeInt(u16, image[0x16..0x18], 0, .little);
     io.beginCapture();
     defer io.endCapture();
@@ -982,7 +987,7 @@ test "disc with no source fails to run" {
 }
 
 test "interpretDisc rejects an image past the disc size" {
-    const big: [disc_max + 1]u8 = @splat(0);
+    const big: [memory.disc.size + 1]u8 = @splat(0);
     io.beginCapture();
     defer io.endCapture();
     try testing.expectEqual(@as(i32, 1), interpretDisc(&big));
