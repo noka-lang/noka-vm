@@ -7,6 +7,9 @@
 //     // iterations: 10000000
 //     // expect: 10000000
 //
+// An optional `// machines: N` header runs the program in N fresh machines per timed run, for
+// benchmarks of machine creation itself. Its Lua twin repeats its own work N times.
+//
 // Results go to bench/results.json (not committed). Each program and target is compared against
 // bench/baseline.json (committed) by its fastest run. More than 10% slower fails the step.
 //
@@ -105,6 +108,7 @@ function loadPrograms() {
         source: lines.slice(i).join('\n'), // the VM doesn't scan comments yet
         expect: header.expect,
         iterations: header.iterations ? Number(header.iterations) : null,
+        machines: header.machines ? Number(header.machines) : 1,
       };
     });
 }
@@ -116,7 +120,9 @@ function timeNative(program) {
   if (check.status !== 0) fail(`${program.name} (native) failed:\n${check.stdout}${check.stderr}`);
   expectOutput(program, 'native', check.stdout);
 
-  const run = spawnSync(args.runner, ['time', String(args.runs), program.path], { encoding: 'utf8' });
+  const run = spawnSync(args.runner, ['time', String(args.runs), program.path, String(program.machines)], {
+    encoding: 'utf8',
+  });
   if (run.status !== 0) fail(`${program.name} (native) failed while timing:\n${run.stderr}`);
   const line = run.stderr.trim().split('\n').pop();
   return withPerIteration(JSON.parse(line), program);
@@ -164,7 +170,7 @@ function timeWasm(program) {
   const samples = [];
   for (let i = 0; i < args.runs; i++) {
     const start = process.hrtime.bigint();
-    wasm.run(program.source);
+    for (let m = 0; m < program.machines; m++) wasm.run(program.source);
     samples.push(Number(process.hrtime.bigint() - start));
   }
   samples.sort((a, b) => a - b);

@@ -1,0 +1,6 @@
+// A fresh machine per run of a short program: noka_new, compile, run, print, noka_free.
+// machines: 10000
+// iterations: 10000
+// expect: 42
+x : 6
+x * 7

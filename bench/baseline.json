@@ -1,58 +1,96 @@
 {
   "machine": "Apple M1 Pro, darwin arm64",
-  "date": "2026-10-22T08:04:21.420Z",
+  "date": "2026-10-24T07:39:18.999Z",
   "runs": 5,
   "results": {
     "case_loop": {
       "iterations": 2000000,
       "native": {
-        "min_ns": 244789000,
-        "median_ns": 245137167,
-        "ns_per_iteration": 122.39
+        "min_ns": 217877750,
+        "median_ns": 220142084,
+        "ns_per_iteration": 108.94
       },
       "wasm": {
-        "min_ns": 330696167,
-        "median_ns": 332151334,
-        "ns_per_iteration": 165.35
+        "min_ns": 329250333,
+        "median_ns": 329513791,
+        "ns_per_iteration": 164.63
+      },
+      "lua": {
+        "min_ns": 84822791,
+        "median_ns": 102232834,
+        "ns_per_iteration": 42.41
       }
     },
     "globals": {
       "iterations": 2000000,
       "native": {
-        "min_ns": 101174375,
-        "median_ns": 101433667,
-        "ns_per_iteration": 50.59
+        "min_ns": 60322208,
+        "median_ns": 60396125,
+        "ns_per_iteration": 30.16
       },
       "wasm": {
-        "min_ns": 132675958,
-        "median_ns": 133188583,
-        "ns_per_iteration": 66.34
+        "min_ns": 133921875,
+        "median_ns": 134194833,
+        "ns_per_iteration": 66.96
+      },
+      "lua": {
+        "min_ns": 51033542,
+        "median_ns": 52315666,
+        "ns_per_iteration": 25.52
       }
     },
     "locals": {
       "iterations": 2000000,
       "native": {
-        "min_ns": 95747417,
-        "median_ns": 96469708,
-        "ns_per_iteration": 47.87
+        "min_ns": 54201542,
+        "median_ns": 57051250,
+        "ns_per_iteration": 27.1
       },
       "wasm": {
-        "min_ns": 107626541,
-        "median_ns": 108205458,
-        "ns_per_iteration": 53.81
+        "min_ns": 106540375,
+        "median_ns": 106774625,
+        "ns_per_iteration": 53.27
+      },
+      "lua": {
+        "min_ns": 13976708,
+        "median_ns": 14123666,
+        "ns_per_iteration": 6.99
+      }
+    },
+    "machine": {
+      "iterations": 10000,
+      "native": {
+        "min_ns": 361757375,
+        "median_ns": 369167375,
+        "ns_per_iteration": 36175.74
+      },
+      "wasm": {
+        "min_ns": 60808666,
+        "median_ns": 69497792,
+        "ns_per_iteration": 6080.87
+      },
+      "lua": {
+        "min_ns": 10892791,
+        "median_ns": 10930709,
+        "ns_per_iteration": 1089.28
       }
     },
     "while_loop": {
       "iterations": 10000000,
       "native": {
-        "min_ns": 350705375,
-        "median_ns": 356149417,
-        "ns_per_iteration": 35.07
+        "min_ns": 197735791,
+        "median_ns": 200412833,
+        "ns_per_iteration": 19.77
       },
       "wasm": {
-        "min_ns": 463477916,
-        "median_ns": 464866416,
-        "ns_per_iteration": 46.35
+        "min_ns": 465669375,
+        "median_ns": 468073042,
+        "ns_per_iteration": 46.57
+      },
+      "lua": {
+        "min_ns": 147003083,
+        "median_ns": 147230958,
+        "ns_per_iteration": 14.7
       }
     }
   }

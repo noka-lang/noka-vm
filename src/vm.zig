@@ -511,7 +511,7 @@ fn expectFailure(source: []const u8, expected: []const u8) !void {
 }
 
 fn evalIn(m: *Machine, source: []const u8) i32 {
-    @memcpy(m.region(memory.disc)[0..source.len], source);
+    @memcpy(noka_memory(m)[0x00000..][0..source.len], source);
     return noka_eval(m, source.len);
 }
 
@@ -940,6 +940,35 @@ test "resetting one machine leaves the other intact" {
     try testing.expectEqual(@as(i32, 1), evalIn(a, "x"));
     try testing.expectEqual(@as(i32, 0), evalIn(b, "x"));
     try testing.expectEqualStrings("runtime error: undefined variable 'x'.\nfrom b\n", io.captured());
+}
+
+test "each machine has DISC, STACK, and HEAP at correct offsets in their own block" {
+    const a = noka_new() orelse return error.OutOfMemory;
+    defer noka_free(a);
+    const b = noka_new() orelse return error.OutOfMemory;
+    defer noka_free(b);
+
+    io.beginCapture();
+    defer io.endCapture();
+
+    // DISC at 0x00000
+    try testing.expectEqual(@as(i32, 0), evalIn(a, "do\n  n : 42\n  s : \"from \" + \"machine a\"\n  n\nend"));
+    try testing.expectEqual(@as(i32, 0), evalIn(b, "do\n  n : 7\n  s : \"from \" + \"machine b\"\n  n\nend"));
+    try testing.expectEqualStrings("42\n7\n", io.captured());
+
+    // STACK at 0x47000
+    const a_slot0 = std.mem.bytesToValue(Value, noka_memory(a)[0x47000..][0..@sizeOf(Value)]);
+    const b_slot0 = std.mem.bytesToValue(Value, noka_memory(b)[0x47000..][0..@sizeOf(Value)]);
+    try testing.expectEqual(@as(f64, 42), a_slot0.number);
+    try testing.expectEqual(@as(f64, 7), b_slot0.number);
+
+    // HEAP at 0x5F000, 128 KiB
+    const a_heap = noka_memory(a)[0x5F000..][0 .. 128 * 1024];
+    const b_heap = noka_memory(b)[0x5F000..][0 .. 128 * 1024];
+    try testing.expect(std.mem.indexOf(u8, a_heap, "from machine a") != null);
+    try testing.expect(std.mem.indexOf(u8, a_heap, "from machine b") == null);
+    try testing.expect(std.mem.indexOf(u8, b_heap, "from machine b") != null);
+    try testing.expect(std.mem.indexOf(u8, b_heap, "from machine a") == null);
 }
 
 // ---- Disc tests --------------------------------------------------------------------------------
