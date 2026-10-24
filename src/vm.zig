@@ -16,6 +16,10 @@ const debug_trace_execution = false;
 // ---- machine -----------------------------------------------------------------------------------
 
 const globals_max = 256;
+comptime {
+    if (globals_max * @sizeOf(Global) > memory.globals.size) @compileError("globals don't fit in GLOBALS");
+    if (@sizeOf(strings.Strings) > memory.heap.size) @compileError("the string table doesn't fit in HEAP");
+}
 
 const Global = struct {
     name: *const strings.String,
@@ -26,13 +30,16 @@ const Global = struct {
 const Machine = struct {
     block: [memory.size]u8 align(16) = undefined,
     chunk: Chunk = undefined,
-    strings: strings.Strings = .{},
-    globals: [globals_max]Global = undefined,
+    strings: *strings.Strings = undefined,
+    globals: *[globals_max]Global = undefined,
     globals_count: usize = 0,
 
     fn create() ?*Machine {
         const m = std.heap.page_allocator.create(Machine) catch return null;
         m.* = .{};
+        m.globals = m.slots(memory.globals, Global)[0..globals_max];
+        m.strings = &m.slots(memory.heap, strings.Strings)[0];
+        m.strings.* = .{};
 
         return m;
     }
@@ -93,7 +100,7 @@ const Machine = struct {
     fn compileAndRun(self: *Machine, source: []const u8) i32 {
         self.chunk = .{ .code = self.region(memory.code), .constants = self.slots(memory.constants, Value) };
 
-        if (!Compiler.compile(source, &self.chunk, &self.strings)) return 1;
+        if (!Compiler.compile(source, &self.chunk, self.strings)) return 1;
         if (debug_print_bytecode) debug.disassembleChunk(&self.chunk, "compiled code");
 
         var vm = VM{ .machine = self, .chunk = &self.chunk, .stack = self.slots(memory.stack, Value) };
