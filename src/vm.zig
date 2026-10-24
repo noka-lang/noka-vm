@@ -96,7 +96,7 @@ const Machine = struct {
         if (!Compiler.compile(source, &self.chunk, &self.strings)) return 1;
         if (debug_print_bytecode) debug.disassembleChunk(&self.chunk, "compiled code");
 
-        var vm = VM{ .machine = self, .chunk = &self.chunk };
+        var vm = VM{ .machine = self, .chunk = &self.chunk, .stack = self.slots(memory.stack, Value) };
 
         return if (vm.run()) 0 else 1;
     }
@@ -177,8 +177,13 @@ const VM = struct {
     machine: *Machine,
     chunk: *const Chunk,
     ip: usize = 0,
-    stack: [Chunk.stack_max]Value = undefined,
+    stack: *[memory.stack_slots]Value,
     sp: usize = 0,
+
+    // Reject any chunk that needs more than `Chunk.stack_max` slots
+    comptime {
+        std.debug.assert(Chunk.stack_max <= memory.stack_slots);
+    }
 
     fn push(self: *VM, value: Value) void {
         self.stack[self.sp] = value;
