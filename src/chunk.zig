@@ -38,8 +38,6 @@ pub const OpCode = enum(u8) {
     jump_if_true,
     // built-ins
     get_builtin,
-    declare_builtin,
-    assign_builtin,
     // globals
     define_global,
     define_const,

@@ -22,14 +22,12 @@ pub fn disassembleInstruction(chunk: *const Chunk, offset: usize) usize {
     const op: OpCode = @enumFromInt(chunk.code[offset]);
     return switch (op) {
         .add => simpleInstruction("OP_ADD", offset),
-        .assign_builtin => byteInstruction("OP_ASSIGN_BUILTIN", chunk, offset),
         .band => simpleInstruction("OP_BAND", offset),
         .bnot => simpleInstruction("OP_BNOT", offset),
         .bor => simpleInstruction("OP_BOR", offset),
         .bxor => simpleInstruction("OP_BXOR", offset),
         .collapse => byteInstruction("OP_COLLAPSE", chunk, offset),
         .constant => constantInstruction("OP_CONSTANT", chunk, offset),
-        .declare_builtin => byteInstruction("OP_DECLARE_BUILTIN", chunk, offset),
         .define_const => constantInstruction("OP_DEFINE_CONST", chunk, offset),
         .define_global => constantInstruction("OP_DEFINE_GLOBAL", chunk, offset),
         .divide => simpleInstruction("OP_DIVIDE", offset),

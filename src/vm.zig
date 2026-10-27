@@ -412,14 +412,6 @@ const VM = struct {
                     if (cond.boolean) self.ip += offset;
                 },
                 .get_builtin => self.push(builtins.common[self.readByte()].value),
-                .declare_builtin => {
-                    const name = builtins.common[self.readByte()].name;
-                    return self.runtimeError("'{s}' is a built-in", .{name});
-                },
-                .assign_builtin => {
-                    const name = builtins.common[self.readByte()].name;
-                    return self.runtimeError("cannot assign to built-in '{s}'", .{name});
-                },
                 .define_global, .define_const => {
                     const name = self.readConstant().string;
                     const mutability: Mutability = switch (op) {
@@ -900,10 +892,11 @@ test "built-ins" {
     try expectOutput("dt * 60", "1");
     try expectOutput("do\n  dt : 5\n  dt\nend", "5");
     try expectOutput("x : dt\nx * 60", "1");
-    try expectFailure("dt : 1", "runtime error: 'dt' is a built-in.");
-    try expectFailure("dt # 1", "runtime error: 'dt' is a built-in.");
-    try expectFailure("dt = 1", "runtime error: cannot assign to built-in 'dt'.");
-    try expectFailure("do\n  dt = 1\nend", "runtime error: cannot assign to built-in 'dt'.");
+    try expectFailure("dt : 1", "compile error at 'dt': 'dt' is a built-in.");
+    try expectFailure("dt # 1", "compile error at 'dt': 'dt' is a built-in.");
+    try expectFailure("dt = 1", "compile error at 'dt': cannot assign to built-in 'dt'.");
+    try expectFailure("do\n  dt = 1\nend", "compile error at 'dt': cannot assign to built-in 'dt'.");
+    try expectFailure("while false\n  dt = 1\nend", "compile error at 'dt': cannot assign to built-in 'dt'.");
 }
 
 // ---- Machine tests -----------------------------------------------------------------------------

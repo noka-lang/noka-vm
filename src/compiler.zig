@@ -164,11 +164,8 @@ pub const Compiler = struct {
         self.advance(); // consume ':' or '#'
 
         if (self.scope_depth == 0) {
-            if (builtins.find(name.lexeme)) |builtin| {
-                self.expression();
-                self.endStatement();
-                self.emitOpByte(.declare_builtin, builtin);
-                self.emitOp(.nil);
+            if (builtins.find(name.lexeme) != null) {
+                self.errorAtFmt(name, "'{s}' is a built-in", .{name.lexeme});
                 return;
             }
 
@@ -716,8 +713,7 @@ pub const Compiler = struct {
 
         if (builtins.find(name.lexeme)) |builtin| {
             if (self.can_assign and self.match(.equal)) {
-                self.expression();
-                self.emitOpByte(.assign_builtin, builtin);
+                self.errorAtFmt(name, "cannot assign to built-in '{s}'", .{name.lexeme});
                 return;
             }
 
@@ -965,10 +961,10 @@ pub const Compiler = struct {
 fn stackEffect(op: OpCode) i8 {
     return switch (op) {
         .constant, .nil, .true, .false, .get_builtin, .get_global, .get_local => 1, // push one
-        .pop, .print, .declare_builtin, .define_global, .define_const => -1, // pop one
+        .pop, .print, .define_global, .define_const => -1, // pop one
         .equal, .greater, .less, .add, .subtract, .multiply, .divide, .modulo, .exponent, .in, .band, .bor, .bxor, .shift_left, .shift_right => -1, // pop two, push one
         .not, .negate, .bnot => 0, // pop one, push one
-        .assign_builtin, .set_global, .set_local, .jump, .jump_if_false, .jump_if_not_nil, .jump_if_true, .loop => 0, // peek
+        .set_global, .set_local, .jump, .jump_if_false, .jump_if_not_nil, .jump_if_true, .loop => 0, // peek
         .collapse => 0, // operand-dependent
         .@"return", _ => 0,
     };
