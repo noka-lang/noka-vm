@@ -9,6 +9,7 @@ const Chunk = chunk_mod.Chunk;
 const OpCode = chunk_mod.OpCode;
 const Value = @import("value.zig").Value;
 const strings = @import("strings.zig");
+const builtins = @import("builtins.zig");
 
 // Ordered lowest to highest, matching LANGUAGE.md's precedence table.
 // TODO: Wire each of these up as operators are added.
@@ -163,6 +164,14 @@ pub const Compiler = struct {
         self.advance(); // consume ':' or '#'
 
         if (self.scope_depth == 0) {
+            if (builtins.find(name.lexeme)) |builtin| {
+                self.expression();
+                self.endStatement();
+                self.emitOpByte(.declare_builtin, builtin);
+                self.emitOp(.nil);
+                return;
+            }
+
             const global = self.identifierConstant(name);
             self.expression();
             self.endStatement();
@@ -705,6 +714,17 @@ pub const Compiler = struct {
             return;
         }
 
+        if (builtins.find(name.lexeme)) |builtin| {
+            if (self.can_assign and self.match(.equal)) {
+                self.expression();
+                self.emitOpByte(.assign_builtin, builtin);
+                return;
+            }
+
+            self.emitOpByte(.get_builtin, builtin);
+            return;
+        }
+
         const global = self.identifierConstant(name) orelse return;
 
         if (self.can_assign and self.match(.equal)) {
@@ -944,11 +964,11 @@ pub const Compiler = struct {
 
 fn stackEffect(op: OpCode) i8 {
     return switch (op) {
-        .constant, .nil, .true, .false, .get_global, .get_local => 1, // push one
-        .pop, .print, .define_global, .define_const => -1, // pop one
+        .constant, .nil, .true, .false, .get_builtin, .get_global, .get_local => 1, // push one
+        .pop, .print, .declare_builtin, .define_global, .define_const => -1, // pop one
         .equal, .greater, .less, .add, .subtract, .multiply, .divide, .modulo, .exponent, .in, .band, .bor, .bxor, .shift_left, .shift_right => -1, // pop two, push one
         .not, .negate, .bnot => 0, // pop one, push one
-        .set_global, .set_local, .jump, .jump_if_false, .jump_if_not_nil, .jump_if_true, .loop => 0, // peek
+        .assign_builtin, .set_global, .set_local, .jump, .jump_if_false, .jump_if_not_nil, .jump_if_true, .loop => 0, // peek
         .collapse => 0, // operand-dependent
         .@"return", _ => 0,
     };

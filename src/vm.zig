@@ -9,6 +9,7 @@ const disc_mod = @import("disc.zig");
 const strings = @import("strings.zig");
 const Mutability = @import("compiler.zig").Mutability;
 const memory = @import("memory.zig");
+const builtins = @import("builtins.zig");
 
 const debug_print_bytecode = false;
 const debug_trace_execution = false;
@@ -409,6 +410,15 @@ const VM = struct {
                         return self.runtimeError("condition expected boolean, got {s}", .{cond.typeName()});
                     }
                     if (cond.boolean) self.ip += offset;
+                },
+                .get_builtin => self.push(builtins.common[self.readByte()].value),
+                .declare_builtin => {
+                    const name = builtins.common[self.readByte()].name;
+                    return self.runtimeError("'{s}' is a built-in", .{name});
+                },
+                .assign_builtin => {
+                    const name = builtins.common[self.readByte()].name;
+                    return self.runtimeError("cannot assign to built-in '{s}'", .{name});
                 },
                 .define_global, .define_const => {
                     const name = self.readConstant().string;
@@ -884,6 +894,16 @@ test "next statement" {
 test "nested loops" {
     try expectOutput("count : 0\ni : 0\nwhile i < 3\n  i = i + 1\n  j : 0\n  while true\n    j = j + 1\n    count = count + 1\n    case j == 2 -> stop\n  end\nend\ncount", "6");
     try expectOutput("i : 0\nwhile i < 3\n  i = i + 1\n  while true\n    stop i\n  end\nend", "3");
+}
+
+test "built-ins" {
+    try expectOutput("dt * 60", "1");
+    try expectOutput("do\n  dt : 5\n  dt\nend", "5");
+    try expectOutput("x : dt\nx * 60", "1");
+    try expectFailure("dt : 1", "runtime error: 'dt' is a built-in.");
+    try expectFailure("dt # 1", "runtime error: 'dt' is a built-in.");
+    try expectFailure("dt = 1", "runtime error: cannot assign to built-in 'dt'.");
+    try expectFailure("do\n  dt = 1\nend", "runtime error: cannot assign to built-in 'dt'.");
 }
 
 // ---- Machine tests -----------------------------------------------------------------------------
