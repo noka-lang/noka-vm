@@ -1,4 +1,4 @@
-//! The VM keeps the values of top-level names in a table in HEAP.
+//! The table of top-level names.
 //! The table outlives a single eval, so a REPL can use names declared on earlier lines.
 
 const std = @import("std");
@@ -63,7 +63,7 @@ test "the 1025th name gets no slot" {
     var names: Names = .{};
 
     for (fakes[0..slots_max], 0..) |*f, i| try std.testing.expectEqual(@as(?u16, @intCast(i)), names.slot(f));
-    try std.testing.expectEqal(null, names.slot(&fakes[slots_max]));
+    try std.testing.expectEqual(null, names.slot(&fakes[slots_max]));
     try std.testing.expectEqual(5, names.slot(&fakes[5]));
 }
 
@@ -77,4 +77,3 @@ test "reset forgets every name" {
 
     try std.testing.expectEqual(0, names.slot(table.intern("y").?));
 }
-
