@@ -10,6 +10,7 @@ const strings = @import("strings.zig");
 const Mutability = @import("compiler.zig").Mutability;
 const memory = @import("memory.zig");
 const builtins = @import("builtins.zig");
+const _ = @import("globals.zig"); // TODO: replace this with a real import once things are ready
 
 const debug_print_bytecode = false;
 const debug_trace_execution = false;

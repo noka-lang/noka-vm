@@ -38,6 +38,7 @@ pub const reserved =   Region{ .offset = 0x7F800, .size = 2 * KiB };
 
 pub const const_slots = constants.size / @sizeOf(Value); // 4096
 pub const stack_slots = stack.size / @sizeOf(Value); // 4096
+pub const globals_slots = globals.size / @sizeOf(Value); // 1024
 
 comptime {
     const all = [_]Region{ disc, code, constants, vram, sprites, map, sfx, palette_io, stack, frames, globals, heap, font, reserved };
