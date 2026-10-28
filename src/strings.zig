@@ -4,7 +4,7 @@ const std = @import("std");
 // This heap is a slice of the console's 128 KiB HEAP region.
 
 pub const bytes_max = 48 * 1024;
-pub const table_max = 1024;
+pub const table_max = 2048;
 const load_max = table_max * 3 / 4;
 
 pub const String = struct {
@@ -15,7 +15,7 @@ pub const String = struct {
 pub const Strings = struct {
     arena: [bytes_max]u8 = undefined,
     arena_used: usize = 0,
-    pool: [table_max]String = undefined,
+    pool: [load_max]String = undefined,
     pool_count: usize = 0,
     table: [table_max]?u16 = @splat(null),
 
@@ -118,3 +118,13 @@ pub const Builder = struct {
         self.strings.arena_used = self.start;
     }
 };
+
+test "the string table holds 1536 strings" {
+    var table: Strings = .{};
+    var buf: [8]u8 = undefined;
+
+    for (0..load_max) |i| {
+        try std.testing.expect(table.intern(try std.fmt.bufPrint(&buf, "g{d}", .{i})) != null);
+    }
+    try std.testing.expectEqual(null, table.intern("g1536"));
+}
