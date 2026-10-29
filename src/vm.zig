@@ -504,6 +504,15 @@ fn evalIn(m: *Machine, source: []const u8) i32 {
     return noka_eval(m, source.len);
 }
 
+/// Writes a noka program that declares `count` globals, followed by `tail`.
+fn declareGlobals(buf: []u8, count: usize, tail: []const u8) ![]const u8 {
+    var w: std.Io.Writer = .fixed(buf);
+    for (0..count) |i| try w.print("g{d} : {d}\n", .{ i, i });
+    try w.writeAll(tail);
+
+    return w.buffered();
+}
+
 test "ignore spaces" {
     try expectOutput("2<3", "true");
     try expectOutput("2 < 3", "true");
@@ -716,6 +725,25 @@ test "globals reset between runs" {
     defer io.endCapture();
     try testing.expectEqual(@as(i32, 0), interpretSource("x : 1\nx"));
     try testing.expectEqual(@as(i32, 0), interpretSource("x : 2\nx"));
+}
+
+test "program scope holds 1024 globals (built-ins don't count)" {
+    var buf: [16 * 1024]u8 = undefined;
+
+    try expectOutput(try declareGlobals(&buf, 1024, "g1023 + dt * 60"), "1024");
+    try expectFailure(try declareGlobals(&buf, 1025, ""), "compile error at 'g1024': too many globals.");
+}
+
+test "using a variable in the REPL before it is declared can still be declared later" {
+    const m = noka_new().?;
+    defer noka_free(m);
+    io.beginCapture();
+    defer io.endCapture();
+
+    try testing.expectEqual(@as(i32, 1), evalIn(m, "y")); // runtime error: undefined varaible 'y'.
+    try testing.expectEqual(@as(i32, 0), evalIn(m, "y : 2")); // nil
+    try testing.expectEqual(@as(i32, 0), evalIn(m, "y")); // 2
+    try testing.expectEqualStrings("runtime error: undefined variable 'y'.\nnil\n2\n", io.captured());
 }
 
 // TODO: when arrays are added test deep-freeze
