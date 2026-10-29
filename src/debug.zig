@@ -28,14 +28,14 @@ pub fn disassembleInstruction(chunk: *const Chunk, offset: usize) usize {
         .bxor => simpleInstruction("OP_BXOR", offset),
         .collapse => byteInstruction("OP_COLLAPSE", chunk, offset),
         .constant => constantInstruction("OP_CONSTANT", chunk, offset),
-        .define_const => constantInstruction("OP_DEFINE_CONST", chunk, offset),
-        .define_global => constantInstruction("OP_DEFINE_GLOBAL", chunk, offset),
+        .define_const => shortInstruction("OP_DEFINE_CONST", chunk, offset),
+        .define_global => shortInstruction("OP_DEFINE_GLOBAL", chunk, offset),
         .divide => simpleInstruction("OP_DIVIDE", offset),
         .equal => simpleInstruction("OP_EQUAL", offset),
         .exponent => simpleInstruction("OP_EXPONENT", offset),
         .false => simpleInstruction("OP_FALSE", offset),
         .get_builtin => byteInstruction("OP_GET_BUILTIN", chunk, offset),
-        .get_global => constantInstruction("OP_GET_GLOBAL", chunk, offset),
+        .get_global => shortInstruction("OP_GET_GLOBAL", chunk, offset),
         .get_local => byteInstruction("OP_GET_LOCAL", chunk, offset),
         .greater => simpleInstruction("OP_GREATER", offset),
         .in => simpleInstruction("OP_IN", offset),
@@ -53,7 +53,7 @@ pub fn disassembleInstruction(chunk: *const Chunk, offset: usize) usize {
         .pop => simpleInstruction("OP_POP", offset),
         .print => simpleInstruction("OP_PRINT", offset),
         .@"return" => simpleInstruction("OP_RETURN", offset),
-        .set_global => constantInstruction("OP_SET_GLOBAL", chunk, offset),
+        .set_global => shortInstruction("OP_SET_GLOBAL", chunk, offset),
         .set_local => byteInstruction("OP_SET_LOCAL", chunk, offset),
         .shift_left => simpleInstruction("OP_SHIFT_LEFT", offset),
         .shift_right => simpleInstruction("OP_SHIFT_RIGHT", offset),
@@ -69,6 +69,12 @@ pub fn disassembleInstruction(chunk: *const Chunk, offset: usize) usize {
 fn byteInstruction(name: []const u8, chunk: *const Chunk, offset: usize) usize {
     io.printf("{s} {d}\n", .{ name, chunk.code[offset + 1] });
     return offset + 2;
+}
+
+fn shortInstruction(name: []const u8, chunk: *const Chunk, offset: usize) usize {
+    const operand = (@as(u16, chunk.code[offset + 1]) << 8) | chunk.code[offset + 2];
+    io.printf("{s} {d}\n", .{ name, operand });
+    return offset + 3;
 }
 
 fn jumpInstruction(name: []const u8, sign: i2, chunk: *const Chunk, offset: usize) usize {

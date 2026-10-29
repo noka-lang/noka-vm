@@ -7,40 +7,39 @@ const debug = @import("debug.zig");
 const Value = @import("value.zig").Value;
 const disc_mod = @import("disc.zig");
 const strings = @import("strings.zig");
-const Mutability = @import("compiler.zig").Mutability;
 const memory = @import("memory.zig");
 const builtins = @import("builtins.zig");
+const globals = @import("globals.zig");
 
 const debug_print_bytecode = false;
 const debug_trace_execution = false;
 
 // ---- machine -----------------------------------------------------------------------------------
 
-const globals_max = 256;
-comptime {
-    if (globals_max * @sizeOf(Global) > memory.globals.size) @compileError("globals don't fit in GLOBALS");
-    if (@sizeOf(strings.Strings) > memory.heap.size) @compileError("the string table doesn't fit in HEAP");
-}
-
-const Global = struct {
-    name: *const strings.String,
-    value: Value,
-    mutability: Mutability,
+const Heap = struct {
+    strings: strings.Strings = .{},
+    names: globals.Names = .{},
 };
+
+comptime {
+    if (@sizeOf(Heap) > memory.heap.size) @compileError("the string and name tables don't fit in HEAP");
+}
 
 const Machine = struct {
     block: [memory.size]u8 align(16) = undefined,
     chunk: Chunk = undefined,
     strings: *strings.Strings = undefined,
-    globals: *[globals_max]Global = undefined,
-    globals_count: usize = 0,
+    names: *globals.Names = undefined,
+    globals: *[memory.globals_slots]Value = undefined,
 
     fn create() ?*Machine {
         const m = std.heap.page_allocator.create(Machine) catch return null;
         m.* = .{};
-        m.globals = m.slots(memory.globals, Global)[0..globals_max];
-        m.strings = &m.slots(memory.heap, strings.Strings)[0];
-        m.strings.* = .{};
+        m.globals = m.slots(memory.globals, Value);
+        const heap = &m.slots(memory.heap, Heap)[0];
+        heap.* = .{};
+        m.strings = &heap.strings;
+        m.names = &heap.names;
 
         return m;
     }
@@ -61,7 +60,7 @@ const Machine = struct {
 
     fn reset(self: *Machine) void {
         self.strings.reset();
-        self.globals_count = 0;
+        self.names.reset();
     }
 
     fn eval(self: *Machine, len: usize) i32 {
@@ -102,28 +101,12 @@ const Machine = struct {
     fn compileAndRun(self: *Machine, source: []const u8) i32 {
         self.chunk = .{ .code = self.region(memory.code), .constants = self.slots(memory.constants, Value) };
 
-        if (!Compiler.compile(source, &self.chunk, self.strings)) return 1;
+        if (!Compiler.compile(source, &self.chunk, self.strings, self.names)) return 1;
         if (debug_print_bytecode) debug.disassembleChunk(&self.chunk, "compiled code");
 
         var vm = VM{ .machine = self, .chunk = &self.chunk, .stack = self.slots(memory.stack, Value) };
 
         return if (vm.run()) 0 else 1;
-    }
-
-    fn defineGlobal(self: *Machine, name: *const strings.String, value: Value, mutability: Mutability) error{ AlreadyDeclared, TooManyGlobals }!void {
-        if (self.findGlobal(name) != null) return error.AlreadyDeclared;
-        if (self.globals_count >= globals_max) return error.TooManyGlobals;
-
-        self.globals[self.globals_count] = .{ .name = name, .value = value, .mutability = mutability };
-        self.globals_count += 1;
-    }
-
-    fn findGlobal(self: *Machine, name: *const strings.String) ?*Global {
-        for (self.globals[0..self.globals_count]) |*global| {
-            if (global.name == name) return global;
-        }
-
-        return null;
     }
 };
 
@@ -413,37 +396,41 @@ const VM = struct {
                 },
                 .get_builtin => self.push(builtins.common[self.readByte()].value),
                 .define_global, .define_const => {
-                    const name = self.readConstant().string;
-                    const mutability: Mutability = switch (op) {
+                    const slot = self.readShort();
+                    const global = &self.machine.names.entries[slot];
+                    if (global.declared) {
+                        return self.runtimeError("'{s}' has already been declared", .{global.name.bytes});
+                    }
+
+                    global.declared = true;
+                    global.mutability = switch (op) {
                         .define_const => .constant,
                         .define_global => .mutable,
                         else => unreachable,
                     };
-
-                    self.machine.defineGlobal(name, self.pop(), mutability) catch |e| return switch (e) {
-                        error.AlreadyDeclared => self.runtimeError("'{s}' has already been declared", .{name.bytes}),
-                        error.TooManyGlobals => self.runtimeError("globals limit exceeded", .{}),
-                    };
+                    self.machine.globals[slot] = self.pop();
                 },
                 .get_global => {
-                    const name = self.readConstant().string;
-                    const global = self.machine.findGlobal(name) orelse {
-                        return self.runtimeError("undefined variable '{s}'", .{name.bytes});
-                    };
-
-                    self.push(global.value);
-                },
-                .set_global => {
-                    const name = self.readConstant().string;
-                    const global = self.machine.findGlobal(name) orelse {
-                        return self.runtimeError("undefined variable '{s}'", .{name.bytes});
-                    };
-
-                    if (global.mutability == .constant) {
-                        return self.runtimeError("'{s}' is constant and cannot be reassigned", .{name.bytes});
+                    const slot = self.readShort();
+                    const global = &self.machine.names.entries[slot];
+                    if (!global.declared) {
+                        return self.runtimeError("undefined variable '{s}'", .{global.name.bytes});
                     }
 
-                    global.value = self.peek(0);
+                    self.push(self.machine.globals[slot]);
+                },
+                .set_global => {
+                    const slot = self.readShort();
+                    const global = self.machine.names.entries[slot];
+
+                    if (!global.declared) {
+                        return self.runtimeError("undefined variable '{s}'", .{global.name.bytes});
+                    }
+                    if (global.mutability == .constant) {
+                        return self.runtimeError("'{s}' is constant and cannot be reassigned", .{global.name.bytes});
+                    }
+
+                    self.machine.globals[slot] = self.peek(0);
                 },
                 // TODO: replace absolute indices with frame-relative ones
                 .get_local => {
@@ -1050,8 +1037,4 @@ test "interpretDisc rejects an image past the disc size" {
     defer io.endCapture();
     try testing.expectEqual(@as(i32, 1), interpretDisc(&big));
     try testing.expectEqualStrings("disc error: disc too large.\n", io.captured());
-}
-
-test {
-    _ = @import("globals.zig"); // TODO: replace this with a real import once things are ready
 }

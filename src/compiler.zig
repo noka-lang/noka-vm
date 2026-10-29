@@ -10,6 +10,7 @@ const OpCode = chunk_mod.OpCode;
 const Value = @import("value.zig").Value;
 const strings = @import("strings.zig");
 const builtins = @import("builtins.zig");
+const globals = @import("globals.zig");
 
 // Ordered lowest to highest, matching LANGUAGE.md's precedence table.
 // TODO: Wire each of these up as operators are added.
@@ -41,6 +42,7 @@ pub const Compiler = struct {
     scanner: Scanner,
     chunk: *Chunk,
     strings: *strings.Strings,
+    names: *globals.Names,
     current: Token = undefined,
     previous: Token = undefined,
     had_error: bool = false,
@@ -80,8 +82,8 @@ pub const Compiler = struct {
     const case_pattern_max = 16;
 
     /// Compile `source` into `chunk`. Returns false if there were errors.
-    pub fn compile(source: []const u8, chunk: *Chunk, string_table: *strings.Strings) bool {
-        var parser = Compiler{ .scanner = Scanner.init(source), .chunk = chunk, .strings = string_table };
+    pub fn compile(source: []const u8, chunk: *Chunk, string_table: *strings.Strings, name_table: *globals.Names) bool {
+        var parser = Compiler{ .scanner = Scanner.init(source), .chunk = chunk, .strings = string_table, .names = name_table };
         parser.advance();
 
         parser.block(.eof);
@@ -169,7 +171,7 @@ pub const Compiler = struct {
                 return;
             }
 
-            const global = self.identifierConstant(name);
+            const global = self.globalSlot(name);
             self.expression();
             self.endStatement();
 
@@ -262,13 +264,16 @@ pub const Compiler = struct {
         self.endStatement();
     }
 
-    fn identifierConstant(self: *Compiler, name: Token) ?u16 {
+    fn globalSlot(self: *Compiler, name: Token) ?u16 {
         const interned = self.strings.intern(name.lexeme) orelse {
             self.errorAt(name, "out of string memory");
             return null;
         };
 
-        return self.chunk.addConstant(.{ .string = interned });
+        return self.names.slot(interned) orelse {
+            self.errorAt(name, "too many globals");
+            return null;
+        };
     }
 
     fn expression(self: *Compiler) void {
@@ -721,7 +726,7 @@ pub const Compiler = struct {
             return;
         }
 
-        const global = self.identifierConstant(name) orelse return;
+        const global = self.globalSlot(name) orelse return;
 
         if (self.can_assign and self.match(.equal)) {
             self.expression();
