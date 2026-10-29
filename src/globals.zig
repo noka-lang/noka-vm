@@ -57,7 +57,7 @@ test "a name keeps the slot it was given" {
     try std.testing.expect(!names.entries[0].declared);
 }
 
-test "the 1025th name gets no slot" {
+test "a name that exceeds the last slot gets no slot" {
     var fakes: [slots_max + 1]strings.String = undefined;
     for (&fakes, 0..) |*f, i| f.* = .{ .bytes = "", .hash = @intCast(i) };
     var names: Names = .{};

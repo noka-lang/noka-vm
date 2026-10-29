@@ -119,7 +119,7 @@ pub const Builder = struct {
     }
 };
 
-test "the string table holds 1536 strings" {
+test "the string table fills at its load limit" {
     var table: Strings = .{};
     var buf: [8]u8 = undefined;
 

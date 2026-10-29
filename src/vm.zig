@@ -421,7 +421,7 @@ const VM = struct {
                 },
                 .set_global => {
                     const slot = self.readShort();
-                    const global = self.machine.names.entries[slot];
+                    const global = &self.machine.names.entries[slot];
 
                     if (!global.declared) {
                         return self.runtimeError("undefined variable '{s}'", .{global.name.bytes});
@@ -740,7 +740,7 @@ test "using a variable in the REPL before it is declared can still be declared l
     io.beginCapture();
     defer io.endCapture();
 
-    try testing.expectEqual(@as(i32, 1), evalIn(m, "y")); // runtime error: undefined varaible 'y'.
+    try testing.expectEqual(@as(i32, 1), evalIn(m, "y")); // runtime error: undefined variable 'y'.
     try testing.expectEqual(@as(i32, 0), evalIn(m, "y : 2")); // nil
     try testing.expectEqual(@as(i32, 0), evalIn(m, "y")); // 2
     try testing.expectEqualStrings("runtime error: undefined variable 'y'.\nnil\n2\n", io.captured());

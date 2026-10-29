@@ -72,14 +72,12 @@ fn byteInstruction(name: []const u8, chunk: *const Chunk, offset: usize) usize {
 }
 
 fn shortInstruction(name: []const u8, chunk: *const Chunk, offset: usize) usize {
-    const operand = (@as(u16, chunk.code[offset + 1]) << 8) | chunk.code[offset + 2];
-    io.printf("{s} {d}\n", .{ name, operand });
+    io.printf("{s} {d}\n", .{ name, readShort(chunk, offset) });
     return offset + 3;
 }
 
 fn jumpInstruction(name: []const u8, sign: i2, chunk: *const Chunk, offset: usize) usize {
-    var jump = @as(u16, chunk.code[offset + 1]) << 8;
-    jump |= chunk.code[offset + 2];
+    const jump = readShort(chunk, offset);
     io.printf("{s} {d} -> {d}\n", .{ name, offset, @as(i32, @intCast(offset)) + 3 + sign * @as(i32, jump) });
     return offset + 3;
 }
@@ -90,9 +88,14 @@ fn simpleInstruction(name: []const u8, offset: usize) usize {
 }
 
 fn constantInstruction(name: []const u8, chunk: *const Chunk, offset: usize) usize {
-    const index = (@as(u16, chunk.code[offset + 1]) << 8) | chunk.code[offset + 2];
+    const index = readShort(chunk, offset);
     io.printf("{s} {d} '", .{ name, index });
     chunk.constants[index].print();
     io.print("'\n");
     return offset + 3;
+}
+
+/// Reads the two-byte operand of the instruction at `offset`.
+fn readShort(chunk: *const Chunk, offset: usize) u16 {
+    return (@as(u16, chunk.code[offset + 1]) << 8) | chunk.code[offset + 2];
 }
