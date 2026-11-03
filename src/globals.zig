@@ -4,44 +4,56 @@
 const std = @import("std");
 const strings = @import("strings.zig");
 const memory = @import("memory.zig");
-const Mutability = @import("compiler.zig").Mutability;
 
 pub const slots_max = memory.globals_slots;
-const index_max = slots_max * 2;
+const table_max = slots_max * 2;
 
-pub const Name = struct {
+pub const Mutability = enum { mutable, constant };
+
+/// What the VM knows about a top-level name.
+/// Its value lives at the same slot of GLOBALS.
+pub const Global = struct {
     name: *const strings.String,
     mutability: Mutability = .mutable,
     declared: bool = false,
 };
 
 pub const Names = struct {
-    entries: [slots_max]Name = undefined,
-    count: usize = 0,
-    index: [index_max]?u16 = @splat(null),
+    pool: [slots_max]Global = undefined,
+    pool_count: usize = 0,
+    table: [table_max]?u16 = @splat(null),
 
     pub fn reset(self: *Names) void {
-        self.count = 0;
-        self.index = @splat(null);
+        self.pool_count = 0;
+        self.table = @splat(null);
     }
 
     /// Returns the slot owned by `name` (gives `name` the next available slot if it doesn't have
     /// one already).
     /// Returns null when every slot is taken.
     pub fn slot(self: *Names, name: *const strings.String) ?u16 {
-        var i: usize = @as(usize, name.hash) & (index_max - 1);
-        while (self.index[i]) |s| : (i = (i + 1) & (index_max - 1)) {
-            if (self.entries[s].name == name) return s;
+        var i: usize = @as(usize, name.hash) & (table_max - 1);
+        while (self.table[i]) |idx| : (i = (i + 1) & (table_max - 1)) {
+            if (self.pool[idx].name == name) return idx;
         }
 
-        if (self.count == slots_max) return null;
+        if (self.pool_count == slots_max) return null;
 
-        const s: u16 = @intCast(self.count);
-        self.entries[s] = .{ .name = name };
-        self.count += 1;
-        self.index[i] = s;
+        const idx: u16 = @intCast(self.pool_count);
+        self.pool[idx] = .{ .name = name };
+        self.pool_count += 1;
+        self.table[i] = idx;
 
-        return s;
+        return idx;
+    }
+
+    /// Marks the global at `idx` as declared and gives it `mutability`.
+    pub fn declare(self: *Names, idx: u16, mutability: Mutability) error{AlreadyDeclared}!void {
+        const global = &self.pool[idx];
+        if (global.declared) return error.AlreadyDeclared;
+
+        global.declared = true;
+        global.mutability = mutability;
     }
 };
 
@@ -54,7 +66,7 @@ test "a name keeps the slot it was given" {
     try std.testing.expectEqual(0, names.slot(x));
     try std.testing.expectEqual(1, names.slot(y));
     try std.testing.expectEqual(0, names.slot(x));
-    try std.testing.expect(!names.entries[0].declared);
+    try std.testing.expect(!names.pool[0].declared);
 }
 
 test "a name that exceeds the last slot gets no slot" {

@@ -6,7 +6,6 @@ const Compiler = @import("compiler.zig").Compiler;
 const debug = @import("debug.zig");
 const Value = @import("value.zig").Value;
 const disc_mod = @import("disc.zig");
-const strings = @import("strings.zig");
 const memory = @import("memory.zig");
 const builtins = @import("builtins.zig");
 const globals = @import("globals.zig");
@@ -16,30 +15,18 @@ const debug_trace_execution = false;
 
 // ---- machine -----------------------------------------------------------------------------------
 
-const Heap = struct {
-    strings: strings.Strings = .{},
-    names: globals.Names = .{},
-};
-
-comptime {
-    if (@sizeOf(Heap) > memory.heap.size) @compileError("the string and name tables don't fit in HEAP");
-}
-
 const Machine = struct {
     block: [memory.size]u8 align(16) = undefined,
     chunk: Chunk = undefined,
-    strings: *strings.Strings = undefined,
-    names: *globals.Names = undefined,
+    heap: *memory.Heap = undefined,
     globals: *[memory.globals_slots]Value = undefined,
 
     fn create() ?*Machine {
         const m = std.heap.page_allocator.create(Machine) catch return null;
         m.* = .{};
         m.globals = m.slots(memory.globals, Value);
-        const heap = &m.slots(memory.heap, Heap)[0];
-        heap.* = .{};
-        m.strings = &heap.strings;
-        m.names = &heap.names;
+        m.heap = &m.slots(memory.heap, memory.Heap)[0];
+        m.heap.* = .{};
 
         return m;
     }
@@ -59,8 +46,7 @@ const Machine = struct {
     }
 
     fn reset(self: *Machine) void {
-        self.strings.reset();
-        self.names.reset();
+        self.heap.reset();
     }
 
     fn eval(self: *Machine, len: usize) i32 {
@@ -101,7 +87,7 @@ const Machine = struct {
     fn compileAndRun(self: *Machine, source: []const u8) i32 {
         self.chunk = .{ .code = self.region(memory.code), .constants = self.slots(memory.constants, Value) };
 
-        if (!Compiler.compile(source, &self.chunk, self.strings, self.names)) return 1;
+        if (!Compiler.compile(source, &self.chunk, self.heap)) return 1;
         if (debug_print_bytecode) debug.disassembleChunk(&self.chunk, "compiled code");
 
         var vm = VM{ .machine = self, .chunk = &self.chunk, .stack = self.slots(memory.stack, Value) };
@@ -260,7 +246,7 @@ const VM = struct {
                     const a = self.pop();
 
                     if (a == .string and b == .string) {
-                        var builder = self.machine.strings.build();
+                        var builder = self.machine.heap.strings.build();
                         builder.pushSlice(a.string.bytes);
                         builder.pushSlice(b.string.bytes);
 
@@ -397,35 +383,28 @@ const VM = struct {
                 .get_builtin => self.push(builtins.common[self.readByte()].value),
                 .define_global, .define_const => {
                     const slot = self.readShort();
-                    const global = &self.machine.names.entries[slot];
-                    if (global.declared) {
-                        return self.runtimeError("'{s}' has already been declared", .{global.name.bytes});
-                    }
-
-                    global.declared = true;
-                    global.mutability = switch (op) {
+                    const mutability: globals.Mutability = switch (op) {
                         .define_const => .constant,
                         .define_global => .mutable,
                         else => unreachable,
+                    };
+
+                    self.machine.heap.names.declare(slot, mutability) catch {
+                        const name = self.machine.heap.names.pool[slot].name;
+                        return self.runtimeError("'{s}' has already been declared", .{name.bytes});
                     };
                     self.machine.globals[slot] = self.pop();
                 },
                 .get_global => {
                     const slot = self.readShort();
-                    const global = &self.machine.names.entries[slot];
-                    if (!global.declared) {
-                        return self.runtimeError("undefined variable '{s}'", .{global.name.bytes});
-                    }
+                    _ = self.declaredGlobal(slot) orelse return false;
 
                     self.push(self.machine.globals[slot]);
                 },
                 .set_global => {
                     const slot = self.readShort();
-                    const global = &self.machine.names.entries[slot];
+                    const global = self.declaredGlobal(slot) orelse return false;
 
-                    if (!global.declared) {
-                        return self.runtimeError("undefined variable '{s}'", .{global.name.bytes});
-                    }
                     if (global.mutability == .constant) {
                         return self.runtimeError("'{s}' is constant and cannot be reassigned", .{global.name.bytes});
                     }
@@ -466,6 +445,17 @@ const VM = struct {
                 },
             }
         }
+    }
+
+    /// Returns the global in `slot`, or null.
+    inline fn declaredGlobal(self: *VM, slot: u16) ?*globals.Global {
+        const global = &self.machine.heap.names.pool[slot];
+        if (!global.declared) {
+            _ = self.runtimeError("undefined variable '{s}'", .{global.name.bytes});
+            return null;
+        }
+
+        return global;
     }
 
     fn runtimeError(self: *VM, comptime message: []const u8, args: anytype) bool {

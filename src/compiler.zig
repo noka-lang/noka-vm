@@ -8,7 +8,7 @@ const chunk_mod = @import("chunk.zig");
 const Chunk = chunk_mod.Chunk;
 const OpCode = chunk_mod.OpCode;
 const Value = @import("value.zig").Value;
-const strings = @import("strings.zig");
+const memory = @import("memory.zig");
 const builtins = @import("builtins.zig");
 const globals = @import("globals.zig");
 
@@ -36,13 +36,12 @@ const Precedence = enum(u8) {
     primary,
 };
 
-pub const Mutability = enum { mutable, constant };
+const Mutability = globals.Mutability;
 
 pub const Compiler = struct {
     scanner: Scanner,
     chunk: *Chunk,
-    strings: *strings.Strings,
-    names: *globals.Names,
+    heap: *memory.Heap,
     current: Token = undefined,
     previous: Token = undefined,
     had_error: bool = false,
@@ -82,8 +81,8 @@ pub const Compiler = struct {
     const case_pattern_max = 16;
 
     /// Compile `source` into `chunk`. Returns false if there were errors.
-    pub fn compile(source: []const u8, chunk: *Chunk, string_table: *strings.Strings, name_table: *globals.Names) bool {
-        var parser = Compiler{ .scanner = Scanner.init(source), .chunk = chunk, .strings = string_table, .names = name_table };
+    pub fn compile(source: []const u8, chunk: *Chunk, heap: *memory.Heap) bool {
+        var parser = Compiler{ .scanner = Scanner.init(source), .chunk = chunk, .heap = heap };
         parser.advance();
 
         parser.block(.eof);
@@ -265,12 +264,12 @@ pub const Compiler = struct {
     }
 
     fn globalSlot(self: *Compiler, name: Token) ?u16 {
-        const interned = self.strings.intern(name.lexeme) orelse {
+        const interned = self.heap.strings.intern(name.lexeme) orelse {
             self.errorAt(name, "out of string memory");
             return null;
         };
 
-        return self.names.slot(interned) orelse {
+        return self.heap.names.slot(interned) orelse {
             self.errorAt(name, "too many globals");
             return null;
         };
@@ -643,7 +642,7 @@ pub const Compiler = struct {
     fn string(self: *Compiler) void {
         const body = self.previous.lexeme[1 .. self.previous.lexeme.len - 1];
 
-        var builder = self.strings.build();
+        var builder = self.heap.strings.build();
         var i: usize = 0;
         while (i < body.len) : (i += 1) {
             if (body[i] != '\\') {
