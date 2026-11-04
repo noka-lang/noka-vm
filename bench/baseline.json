@@ -1,96 +1,114 @@
 {
   "machine": "Apple M1 Pro, darwin arm64",
-  "date": "2026-10-24T07:39:18.999Z",
+  "date": "2026-10-29T21:47:16.785Z",
   "runs": 5,
   "results": {
     "case_loop": {
       "iterations": 2000000,
       "native": {
-        "min_ns": 217877750,
-        "median_ns": 220142084,
-        "ns_per_iteration": 108.94
+        "min_ns": 237081042,
+        "median_ns": 239879125,
+        "ns_per_iteration": 118.54
       },
       "wasm": {
-        "min_ns": 329250333,
-        "median_ns": 329513791,
-        "ns_per_iteration": 164.63
+        "min_ns": 336714375,
+        "median_ns": 342028000,
+        "ns_per_iteration": 168.36
       },
       "lua": {
-        "min_ns": 84822791,
-        "median_ns": 102232834,
-        "ns_per_iteration": 42.41
+        "min_ns": 108707708,
+        "median_ns": 114805917,
+        "ns_per_iteration": 54.35
       }
     },
     "globals": {
       "iterations": 2000000,
       "native": {
-        "min_ns": 60322208,
-        "median_ns": 60396125,
-        "ns_per_iteration": 30.16
+        "min_ns": 58309792,
+        "median_ns": 58476375,
+        "ns_per_iteration": 29.15
       },
       "wasm": {
-        "min_ns": 133921875,
-        "median_ns": 134194833,
-        "ns_per_iteration": 66.96
+        "min_ns": 137814417,
+        "median_ns": 138754125,
+        "ns_per_iteration": 68.91
       },
       "lua": {
-        "min_ns": 51033542,
-        "median_ns": 52315666,
-        "ns_per_iteration": 25.52
+        "min_ns": 55600833,
+        "median_ns": 60224166,
+        "ns_per_iteration": 27.8
+      }
+    },
+    "globals_wide": {
+      "iterations": 2000000,
+      "native": {
+        "min_ns": 58227875,
+        "median_ns": 58699666,
+        "ns_per_iteration": 29.11
+      },
+      "wasm": {
+        "min_ns": 139450875,
+        "median_ns": 140508417,
+        "ns_per_iteration": 69.73
+      },
+      "lua": {
+        "min_ns": 119179667,
+        "median_ns": 126829708,
+        "ns_per_iteration": 59.59
       }
     },
     "locals": {
       "iterations": 2000000,
       "native": {
-        "min_ns": 54201542,
-        "median_ns": 57051250,
-        "ns_per_iteration": 27.1
+        "min_ns": 56086000,
+        "median_ns": 56469083,
+        "ns_per_iteration": 28.04
       },
       "wasm": {
-        "min_ns": 106540375,
-        "median_ns": 106774625,
-        "ns_per_iteration": 53.27
+        "min_ns": 109562417,
+        "median_ns": 110014959,
+        "ns_per_iteration": 54.78
       },
       "lua": {
-        "min_ns": 13976708,
-        "median_ns": 14123666,
-        "ns_per_iteration": 6.99
+        "min_ns": 15098125,
+        "median_ns": 15456958,
+        "ns_per_iteration": 7.55
       }
     },
     "machine": {
       "iterations": 10000,
       "native": {
-        "min_ns": 361757375,
-        "median_ns": 369167375,
-        "ns_per_iteration": 36175.74
+        "min_ns": 209924416,
+        "median_ns": 212318833,
+        "ns_per_iteration": 20992.44
       },
       "wasm": {
-        "min_ns": 60808666,
-        "median_ns": 69497792,
-        "ns_per_iteration": 6080.87
+        "min_ns": 19758000,
+        "median_ns": 20018583,
+        "ns_per_iteration": 1975.8
       },
       "lua": {
-        "min_ns": 10892791,
-        "median_ns": 10930709,
-        "ns_per_iteration": 1089.28
+        "min_ns": 13163458,
+        "median_ns": 13638166,
+        "ns_per_iteration": 1316.35
       }
     },
     "while_loop": {
       "iterations": 10000000,
       "native": {
-        "min_ns": 197735791,
-        "median_ns": 200412833,
-        "ns_per_iteration": 19.77
+        "min_ns": 236610791,
+        "median_ns": 243674792,
+        "ns_per_iteration": 23.66
       },
       "wasm": {
-        "min_ns": 465669375,
-        "median_ns": 468073042,
-        "ns_per_iteration": 46.57
+        "min_ns": 481505375,
+        "median_ns": 500826042,
+        "ns_per_iteration": 48.15
       },
       "lua": {
-        "min_ns": 147003083,
-        "median_ns": 147230958,
-        "ns_per_iteration": 14.7
+        "min_ns": 150221375,
+        "median_ns": 171390375,
+        "ns_per_iteration": 15.02
       }
     }
   }
