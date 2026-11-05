@@ -736,6 +736,12 @@ test "using a variable in the REPL before it is declared can still be declared l
     try testing.expectEqualStrings("runtime error: undefined variable 'y'.\nnil\n2\n", io.captured());
 }
 
+test "init, tick, and draw are ordinary names" {
+    try expectOutput("draw : 1\ndraw", "1");
+    try expectOutput("tick : 2\ninit : tick + 1\ninit", "3");
+    try expectFailure("init + 1", "runtime error: undefined variable 'init'.");
+}
+
 // TODO: when arrays are added test deep-freeze
 
 test "bare case expression" {

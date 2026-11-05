@@ -13,8 +13,8 @@ pub const TokenType = enum {
     // three-character tokens
     greater_greater_equal, less_less_equal, star_star_equal,
     // keywords
-    @"and", band, bnot, bor, bxor, case, @"catch", do, draw, end, err, false, @"fn", @"for", @"if",
-    in, init, next, nil, not, @"or", ret, stop, this, tick, true, @"while",
+    @"and", band, bnot, bor, bxor, case, @"catch", do, end, err, false, @"fn", @"for", @"if", in,
+    next, nil, not, @"or", ret, stop, this, true, @"while",
     // literals
     identifier, number, string,
     // bookkeeping
@@ -38,7 +38,6 @@ const keywords = std.StaticStringMap(TokenType).initComptime(.{
     .{ "case", .case },
     .{ "catch", .@"catch" },
     .{ "do", .do },
-    .{ "draw", .draw },
     .{ "end", .end },
     .{ "err", .err },
     .{ "false", .false },
@@ -46,7 +45,6 @@ const keywords = std.StaticStringMap(TokenType).initComptime(.{
     .{ "for", .@"for" },
     .{ "if", .@"if" },
     .{ "in", .in },
-    .{ "init", .init },
     .{ "next", .next },
     .{ "nil", .nil },
     .{ "not", .not },
@@ -54,7 +52,6 @@ const keywords = std.StaticStringMap(TokenType).initComptime(.{
     .{ "ret", .ret },
     .{ "stop", .stop },
     .{ "this", .this },
-    .{ "tick", .tick },
     .{ "true", .true },
     .{ "while", .@"while" },
     .{ "_", .underscore },
