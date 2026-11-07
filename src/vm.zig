@@ -44,6 +44,7 @@ const Machine = struct {
         m.globals = m.slots(memory.globals, Value);
         m.heap = &m.slots(memory.heap, memory.Heap)[0];
         m.heap.* = .{};
+        m.failed = false;
         m.report.len = 0;
 
         return m;
@@ -186,7 +187,10 @@ pub fn interpretDisc(image: []const u8, report: *Report) Status {
     }
     @memcpy(m.region(memory.disc)[0..image.len], image);
 
-    return m.loadDisc(image.len);
+    const status = m.loadDisc(image.len);
+    if (status == .failed) report.* = m.report;
+
+    return status;
 }
 
 // ---- VM ----------------------------------------------------------------------------------------

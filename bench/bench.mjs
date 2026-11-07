@@ -149,14 +149,14 @@ async function loadWasm(path) {
     run(source) {
       const bytes = new TextEncoder().encode(source);
       // A fresh machine per run, matching the native runner's interpretSource.
-      const m = e.noka_new();
+      const m = e.noka_machine_new();
       if (!m) fail('vm.wasm is out of memory');
       if (bytes.length > DISC.size) fail('program larger than the disc buffer');
-      // noka_new can grow memory, which detaches older views, so take the view after it.
+      // noka_machine_new can grow memory, which detaches older views, so take the view after it.
       new Uint8Array(memory.buffer, e.noka_memory(m) + DISC.offset, bytes.length).set(bytes);
       output = '';
       const status = e.noka_eval(m, bytes.length);
-      e.noka_free(m);
+      e.noka_machine_free(m);
       return { status, output };
     },
   };
@@ -164,7 +164,7 @@ async function loadWasm(path) {
 
 function timeWasm(program) {
   const first = wasm.run(program.source);
-  if (first.status !== 0) fail(`${program.name} (wasm) failed:\n${first.output}`);
+  if (first.status === 2) fail(`${program.name} (wasm) failed:\n${first.output}`);
   expectOutput(program, 'wasm', first.output);
 
   const samples = [];

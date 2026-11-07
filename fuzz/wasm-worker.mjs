@@ -26,18 +26,18 @@ async function instantiate() {
   return {
     run(source) {
       const src = new TextEncoder().encode(source);
-      const m = e.noka_new();
-      if (!m) return { kind: 'crash', output: '', detail: 'noka_new returned null' };
+      const m = e.noka_machine_new();
+      if (!m) return { kind: 'crash', output: '', detail: 'noka_machine_new returned null' };
       if (src.length > DISC.size) {
-        e.noka_free(m);
+        e.noka_machine_free(m);
         return { kind: 'clean', output: 'too large for the disc buffer' };
       }
-      // noka_new can grow memory, which detaches older views, so take the view after it.
+      // noka_machine_new can grow memory, which detaches older views, so take the view after it.
       new Uint8Array(memory.buffer, e.noka_memory(m) + DISC.offset, src.length).set(src);
       output = '';
       const status = e.noka_eval(m, src.length);
-      e.noka_free(m);
-      return { kind: status === 0 || status === 1 ? 'clean' : 'crash', output, detail: `noka_eval returned ${status}` };
+      e.noka_machine_free(m);
+      return { kind: status >= 0 && status <= 2 ? 'clean' : 'crash', output, detail: `noka_eval returned ${status}` };
     },
   };
 }

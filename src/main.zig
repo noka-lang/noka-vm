@@ -23,7 +23,7 @@ pub fn main(init: std.process.Init) !u8 {
             std.debug.print("failed to read disc: {s}\n", .{@errorName(err)});
             return 2;
         };
-        return finish(noka.interpretDisc(image, &report), report);
+        return finish(noka.interpretDisc(image, &report), &report);
     }
 
     // Joining argv means the unquoted `zig build run -- 1 + 2` works too, not just the quoted form.
