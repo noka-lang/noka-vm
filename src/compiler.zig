@@ -1,5 +1,4 @@
 const std = @import("std");
-const io = @import("io.zig");
 const scanner_mod = @import("scanner.zig");
 const Scanner = scanner_mod.Scanner;
 const Token = scanner_mod.Token;
@@ -11,6 +10,7 @@ const Value = @import("value.zig").Value;
 const memory = @import("memory.zig");
 const builtins = @import("builtins.zig");
 const globals = @import("globals.zig");
+const Report = @import("report.zig").Report;
 
 // Ordered lowest to highest, matching LANGUAGE.md's precedence table.
 // TODO: Wire each of these up as operators are added.
@@ -42,6 +42,7 @@ pub const Compiler = struct {
     scanner: Scanner,
     chunk: *Chunk,
     heap: *memory.Heap,
+    report: *Report,
     current: Token = undefined,
     previous: Token = undefined,
     had_error: bool = false,
@@ -81,8 +82,8 @@ pub const Compiler = struct {
     const case_pattern_max = 16;
 
     /// Compile `source` into `chunk`. Returns false if there were errors.
-    pub fn compile(source: []const u8, chunk: *Chunk, heap: *memory.Heap) bool {
-        var parser = Compiler{ .scanner = Scanner.init(source), .chunk = chunk, .heap = heap };
+    pub fn compile(source: []const u8, chunk: *Chunk, heap: *memory.Heap, report: *Report) bool {
+        var parser = Compiler{ .scanner = Scanner.init(source), .chunk = chunk, .heap = heap, .report = report };
         parser.advance();
 
         parser.block(.eof);
@@ -92,7 +93,7 @@ pub const Compiler = struct {
         parser.emitOp(.@"return");
 
         if (chunk.overflow) {
-            io.print("compile error: program too large.\n");
+            report.write(.compile, "program too large", .{});
             return false;
         }
 
@@ -955,9 +956,9 @@ pub const Compiler = struct {
         self.had_error = true;
 
         if (token.type == .eof) {
-            io.printf("compile error at end: {s}.\n", .{msg});
+            self.report.write(.compile, "at end: {s}", .{msg});
         } else {
-            io.printf("compile error at '{s}': {s}.\n", .{ token.lexeme, msg });
+            self.report.write(.compile, "at '{s}': {s}", .{ token.lexeme, msg });
         }
     }
 };

@@ -9,11 +9,15 @@ const disc_mod = @import("disc.zig");
 const memory = @import("memory.zig");
 const builtins = @import("builtins.zig");
 const globals = @import("globals.zig");
+const report_mod = @import("report.zig");
+const Reason = report_mod.Reason;
 
 const debug_print_bytecode = false;
 const debug_trace_execution = false;
 
 // ---- machine -----------------------------------------------------------------------------------
+
+pub const Report = report_mod.Report;
 
 pub const Status = enum(i32) {
     /// The program is calling `noka_tick` and `noka_draw`.
@@ -26,11 +30,13 @@ pub const Status = enum(i32) {
 };
 
 const Machine = struct {
+    // Do not give fields defaults, or `m.* = .{}` will copy the 512 KiB block on every create.
     block: [memory.size]u8 align(16) = undefined,
     chunk: Chunk = undefined,
     heap: *memory.Heap = undefined,
     globals: *[memory.globals_slots]Value = undefined,
-    failed: bool = false,
+    failed: bool = undefined,
+    report: Report = undefined,
 
     fn create() ?*Machine {
         const m = std.heap.page_allocator.create(Machine) catch return null;
@@ -38,6 +44,7 @@ const Machine = struct {
         m.globals = m.slots(memory.globals, Value);
         m.heap = &m.slots(memory.heap, memory.Heap)[0];
         m.heap.* = .{};
+        m.report.len = 0;
 
         return m;
     }
@@ -59,6 +66,7 @@ const Machine = struct {
     fn reset(self: *Machine) void {
         self.heap.reset();
         self.failed = false;
+        self.report.len = 0;
     }
 
     fn fail(self: *Machine) Status {
@@ -71,7 +79,7 @@ const Machine = struct {
         const disc = self.region(memory.disc);
 
         if (len > disc.len) {
-            io.print("disc error: source too large.\n");
+            self.report.write(.disc, "source too large", .{});
             return self.fail();
         }
 
@@ -83,18 +91,18 @@ const Machine = struct {
         const disc = self.region(memory.disc);
 
         if (len > disc.len) {
-            io.print("disc error: disc too large.\n");
+            self.report.write(.disc, "disc too large", .{});
             return self.fail();
         }
 
         const image = disc[0..len];
         const header = disc_mod.parse(image) catch |e| {
-            io.printf("disc error: {s}.\n", .{disc_mod.describe(e)});
+            self.report.write(.disc, "{s}", .{disc_mod.describe(e)});
             return self.fail();
         };
 
         const src = header.section(image, .src) orelse {
-            io.print("disc error: disc has no source.\n");
+            self.report.write(.disc, "disc has no source", .{});
             return self.fail();
         };
 
@@ -106,7 +114,7 @@ const Machine = struct {
     fn compileAndRun(self: *Machine, source: []const u8) Status {
         self.chunk = .{ .code = self.region(memory.code), .constants = self.slots(memory.constants, Value) };
 
-        if (!Compiler.compile(source, &self.chunk, self.heap)) return self.fail();
+        if (!Compiler.compile(source, &self.chunk, self.heap, &self.report)) return self.fail();
         if (debug_print_bytecode) debug.disassembleChunk(&self.chunk, "compiled code");
 
         var vm = VM{ .machine = self, .chunk = &self.chunk, .stack = self.slots(memory.stack, Value) };
@@ -134,6 +142,15 @@ export fn noka_memory(m: *Machine) [*]u8 {
     return &m.block;
 }
 
+/// Returns the crash report after a `failed` status, empty otherwise.
+export fn noka_report(m: *Machine) [*]const u8 {
+    return &m.report.bytes;
+}
+
+export fn noka_report_len(m: *Machine) usize {
+    return m.report.len;
+}
+
 export fn noka_eval(m: *Machine, len: usize) Status {
     return m.eval(len);
 }
@@ -142,24 +159,29 @@ export fn noka_load(m: *Machine, len: usize) Status {
     return m.loadDisc(len);
 }
 
-pub fn interpretSource(source: []const u8) Status {
+/// Run `source` in a fresh machine, `report` is given the crash report on failure.
+pub fn interpretSource(source: []const u8, report: *Report) Status {
     const m = Machine.create() orelse {
-        io.print("out of memory.\n");
+        report.write(.oom, "out of memory", .{});
         return .failed;
     };
     defer m.destroy();
 
-    return m.compileAndRun(source);
+    const status = m.compileAndRun(source);
+    if (status == .failed) report.* = m.report;
+
+    return status;
 }
 
-pub fn interpretDisc(image: []const u8) Status {
+pub fn interpretDisc(image: []const u8, report: *Report) Status {
     const m = Machine.create() orelse {
-        io.print("out of memory.\n");
+        report.write(.oom, "out of memory", .{});
         return .failed;
     };
     defer m.destroy();
+
     if (image.len > memory.disc.size) {
-        io.print("disc error: disc too large.\n");
+        report.write(.disc, "disc too large", .{});
         return .failed;
     }
     @memcpy(m.region(memory.disc)[0..image.len], image);
@@ -213,12 +235,12 @@ const VM = struct {
 
     fn toInt32(self: *VM, n: f64) ?i32 {
         if (@trunc(n) != n) {
-            _ = self.runtimeError("bitwise expected whole number, got {d}", .{n});
+            _ = self.runtimeError(.math, "bitwise expected whole number, got {d}", .{n});
             return null;
         }
 
         if (n < std.math.minInt(i32) or n > std.math.maxInt(i32)) {
-            _ = self.runtimeError("bitwise expected 32-bit number, got {d}", .{n});
+            _ = self.runtimeError(.math, "bitwise expected 32-bit number, got {d}", .{n});
             return null;
         }
 
@@ -250,7 +272,7 @@ const VM = struct {
                     const a = self.pop();
 
                     if (a != .number or b != .number) {
-                        return self.runtimeError("compare expected two numbers, got {s} and {s}", .{ a.typeName(), b.typeName() });
+                        return self.runtimeError(.type, "compare expected two numbers, got {s} and {s}", .{ a.typeName(), b.typeName() });
                     }
 
                     self.push(.{ .boolean = switch (op) {
@@ -269,7 +291,7 @@ const VM = struct {
                         builder.pushSlice(b.string.bytes);
 
                         const joined = builder.finish() orelse {
-                            return self.runtimeError("out of string memory", .{});
+                            return self.runtimeError(.oom, "out of string memory", .{});
                         };
 
                         self.push(.{ .string = joined });
@@ -277,7 +299,7 @@ const VM = struct {
                     }
 
                     if (a != .number or b != .number) {
-                        return self.runtimeError("'add' expected two numbers or strings, got {s} and {s}", .{ a.typeName(), b.typeName() });
+                        return self.runtimeError(.type, "'add' expected two numbers or strings, got {s} and {s}", .{ a.typeName(), b.typeName() });
                     }
 
                     self.push(.{ .number = a.number + b.number });
@@ -287,7 +309,7 @@ const VM = struct {
                     const a = self.pop();
 
                     if (a != .number or b != .number) {
-                        return self.runtimeError("'{s}' expected two numbers, got {s} and {s}", .{ @tagName(op), a.typeName(), b.typeName() });
+                        return self.runtimeError(.type, "'{s}' expected two numbers, got {s} and {s}", .{ @tagName(op), a.typeName(), b.typeName() });
                     }
 
                     self.push(.{ .number = switch (op) {
@@ -305,7 +327,7 @@ const VM = struct {
                     const a = self.pop();
 
                     if (a != .number or b != .number) {
-                        return self.runtimeError("'{s}' expected two numbers, got {s} and {s}", .{ @tagName(op), a.typeName(), b.typeName() });
+                        return self.runtimeError(.type, "'{s}' expected two numbers, got {s} and {s}", .{ @tagName(op), a.typeName(), b.typeName() });
                     }
 
                     const ai = self.toInt32(a.number) orelse return false;
@@ -314,7 +336,7 @@ const VM = struct {
                     const sh: u5 = switch (op) {
                         .shift_left, .shift_right => blk: {
                             if (bi < 0 or bi > 31) {
-                                return self.runtimeError("'{s}' expected shift of 0-31, got {d}", .{ @tagName(op), bi });
+                                return self.runtimeError(.math, "'{s}' expected shift of 0-31, got {d}", .{ @tagName(op), bi });
                             }
                             break :blk @intCast(bi);
                         },
@@ -334,7 +356,7 @@ const VM = struct {
                     const v = self.pop();
 
                     if (v != .number) {
-                        return self.runtimeError("negate expected number, got {s}", .{v.typeName()});
+                        return self.runtimeError(.type, "negate expected number, got {s}", .{v.typeName()});
                     }
 
                     self.push(.{ .number = -v.number });
@@ -343,7 +365,7 @@ const VM = struct {
                     const v = self.pop();
 
                     if (v != .boolean) {
-                        return self.runtimeError("'not' expected boolean, got {s}", .{v.typeName()});
+                        return self.runtimeError(.type, "'not' expected boolean, got {s}", .{v.typeName()});
                     }
 
                     self.push(.{ .boolean = !v.boolean });
@@ -354,7 +376,7 @@ const VM = struct {
 
                     // TODO: arrays and objects
                     if (needle != .string or haystack != .string) {
-                        return self.runtimeError("'in' expected two strings, got {s} and {s}", .{ needle.typeName(), haystack.typeName() });
+                        return self.runtimeError(.type, "'in' expected two strings, got {s} and {s}", .{ needle.typeName(), haystack.typeName() });
                     }
 
                     self.push(.{ .boolean = std.mem.indexOf(u8, haystack.string.bytes, needle.string.bytes) != null });
@@ -363,7 +385,7 @@ const VM = struct {
                     const v = self.pop();
 
                     if (v != .number) {
-                        return self.runtimeError("'bnot' expected number, got {s}", .{v.typeName()});
+                        return self.runtimeError(.type, "'bnot' expected number, got {s}", .{v.typeName()});
                     }
 
                     const vi = self.toInt32(v.number) orelse return false;
@@ -381,7 +403,7 @@ const VM = struct {
                     const offset = self.readShort();
                     const cond = self.peek(0);
                     if (cond != .boolean) {
-                        return self.runtimeError("condition expected boolean, got {s}", .{cond.typeName()});
+                        return self.runtimeError(.type, "condition expected boolean, got {s}", .{cond.typeName()});
                     }
 
                     if (cond.boolean == false) self.ip += offset;
@@ -394,7 +416,7 @@ const VM = struct {
                     const offset = self.readShort();
                     const cond = self.peek(0);
                     if (cond != .boolean) {
-                        return self.runtimeError("condition expected boolean, got {s}", .{cond.typeName()});
+                        return self.runtimeError(.type, "condition expected boolean, got {s}", .{cond.typeName()});
                     }
                     if (cond.boolean) self.ip += offset;
                 },
@@ -409,7 +431,7 @@ const VM = struct {
 
                     self.machine.heap.names.declare(slot, mutability) catch {
                         const name = self.machine.heap.names.pool[slot].name;
-                        return self.runtimeError("'{s}' has already been declared", .{name.bytes});
+                        return self.runtimeError(.undefined, "'{s}' has already been declared", .{name.bytes});
                     };
                     self.machine.globals[slot] = self.pop();
                 },
@@ -424,7 +446,7 @@ const VM = struct {
                     const global = self.declaredGlobal(slot) orelse return false;
 
                     if (global.mutability == .constant) {
-                        return self.runtimeError("'{s}' is constant and cannot be reassigned", .{global.name.bytes});
+                        return self.runtimeError(.frozen, "'{s}' is constant and cannot be reassigned", .{global.name.bytes});
                     }
 
                     self.machine.globals[slot] = self.peek(0);
@@ -469,17 +491,15 @@ const VM = struct {
     inline fn declaredGlobal(self: *VM, slot: u16) ?*globals.Global {
         const global = &self.machine.heap.names.pool[slot];
         if (!global.declared) {
-            _ = self.runtimeError("undefined variable '{s}'", .{global.name.bytes});
+            _ = self.runtimeError(.undefined, "undefined variable '{s}'", .{global.name.bytes});
             return null;
         }
 
         return global;
     }
 
-    fn runtimeError(self: *VM, comptime message: []const u8, args: anytype) bool {
-        // TODO: print line number
-        _ = self;
-        io.printf("runtime error: " ++ message ++ ".\n", args);
+    fn runtimeError(self: *VM, reason: Reason, comptime message: []const u8, args: anytype) bool {
+        self.machine.report.write(reason, message, args);
 
         return false;
     }
@@ -492,19 +512,28 @@ const testing = @import("std").testing;
 fn expectOutput(source: []const u8, expected: []const u8) !void {
     io.beginCapture();
     defer io.endCapture();
-    const code = interpretSource(source);
+    var report: Report = .{};
+    const code = interpretSource(source, &report);
 
     try testing.expectEqualStrings(expected, std.mem.trimEnd(u8, io.captured(), "\n"));
     try testing.expectEqual(Status.finished, code);
 }
 
-fn expectFailure(source: []const u8, expected: []const u8) !void {
+fn expectFailure(source: []const u8, reason: []const u8, message: []const u8) !void {
+    const m = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(m);
     io.beginCapture();
     defer io.endCapture();
-    const code = interpretSource(source);
 
-    try testing.expectEqualStrings(expected, std.mem.trimEnd(u8, io.captured(), "\n"));
-    try testing.expectEqual(Status.failed, code);
+    try testing.expectEqual(Status.failed, evalIn(m, source));
+    try expectReport(m, reason, message);
+    try testing.expectEqualStrings("", io.captured());
+}
+
+fn expectReport(m: *Machine, reason: []const u8, message: []const u8) !void {
+    var buf: [1024]u8 = undefined;
+    const expected = try std.fmt.bufPrint(&buf, "{s}\n0\n0\n{s}", .{ reason, message });
+    try testing.expectEqualStrings(expected, noka_report(m)[0..noka_report_len(m)]);
 }
 
 fn evalIn(m: *Machine, source: []const u8) Status {
@@ -557,7 +586,7 @@ test "comparison" {
     try expectOutput("4 >= 3", "true");
     try expectOutput("5 <= 5", "true");
     try expectOutput("6 >= 6", "true");
-    try expectFailure("1 < true", "runtime error: compare expected two numbers, got number and boolean.");
+    try expectFailure("1 < true", "type", "compare expected two numbers, got number and boolean");
 }
 
 test "boolean logical operators" {
@@ -571,12 +600,12 @@ test "boolean logical operators" {
     try expectOutput("true or false", "true");
     try expectOutput("false or true", "true");
     try expectOutput("false or false", "false");
-    try expectFailure("not 1", "runtime error: 'not' expected boolean, got number.");
-    try expectFailure("1 and 2", "runtime error: condition expected boolean, got number.");
-    try expectFailure("true band 1", "runtime error: 'band' expected two numbers, got boolean and number.");
-    try expectFailure("1.5 band 2", "runtime error: bitwise expected whole number, got 1.5.");
-    try expectFailure("5000000000 bor 1", "runtime error: bitwise expected 32-bit number, got 5000000000.");
-    try expectFailure("!true", "compile error at end: '!' is not an operator, use 'not' for logical negation.");
+    try expectFailure("not 1", "type", "'not' expected boolean, got number");
+    try expectFailure("1 and 2", "type", "condition expected boolean, got number");
+    try expectFailure("true band 1", "type", "'band' expected two numbers, got boolean and number");
+    try expectFailure("1.5 band 2", "math", "bitwise expected whole number, got 1.5");
+    try expectFailure("5000000000 bor 1", "math", "bitwise expected 32-bit number, got 5000000000");
+    try expectFailure("!true", "compile", "at end: '!' is not an operator, use 'not' for logical negation");
 }
 
 test "bitwise logical operators" {
@@ -590,22 +619,22 @@ test "bitwise logical operators" {
 
 test "short-circuiting operators" {
     try expectOutput("false and (1 + true)", "false");
-    try expectFailure("true and (1 + true)", "runtime error: 'add' expected two numbers or strings, got number and boolean.");
+    try expectFailure("true and (1 + true)", "type", "'add' expected two numbers or strings, got number and boolean");
     try expectOutput("true or (1 + true)", "true");
-    try expectFailure("false or (1 + true)", "runtime error: 'add' expected two numbers or strings, got number and boolean.");
+    try expectFailure("false or (1 + true)", "type", "'add' expected two numbers or strings, got number and boolean");
     try expectOutput("3 ?? (1 + true)", "3");
 }
 
 test "arithmetic on non-numbers is a runtime error" {
-    try expectFailure("1 + true", "runtime error: 'add' expected two numbers or strings, got number and boolean.");
-    try expectFailure("nil - false", "runtime error: 'subtract' expected two numbers, got nil and boolean.");
-    try expectFailure("3 * true", "runtime error: 'multiply' expected two numbers, got number and boolean.");
-    try expectFailure("false / 4", "runtime error: 'divide' expected two numbers, got boolean and number.");
+    try expectFailure("1 + true", "type", "'add' expected two numbers or strings, got number and boolean");
+    try expectFailure("nil - false", "type", "'subtract' expected two numbers, got nil and boolean");
+    try expectFailure("3 * true", "type", "'multiply' expected two numbers, got number and boolean");
+    try expectFailure("false / 4", "type", "'divide' expected two numbers, got boolean and number");
 }
 
 test "negating a non-number is a runtime error" {
-    try expectFailure("-true", "runtime error: negate expected number, got boolean.");
-    try expectFailure("-nil", "runtime error: negate expected number, got nil.");
+    try expectFailure("-true", "type", "negate expected number, got boolean");
+    try expectFailure("-nil", "type", "negate expected number, got nil");
 }
 
 test "precedence and grouping" {
@@ -648,7 +677,7 @@ test "blocks and locals" {
     try expectOutput("a : 1\ndo\n  a : 2\nend\na", "1");
     try expectOutput("1 + do\n  a : 2\n  a\nend", "3");
     try expectOutput("do\n  a : 1\n  a = 2\n  a\nend", "2");
-    try expectFailure("do\n  a : 1\n  a : 2\nend", "compile error at 'a': 'a' has already been declared.");
+    try expectFailure("do\n  a : 1\n  a : 2\nend", "compile", "at 'a': 'a' has already been declared");
 }
 
 test "strings" {
@@ -665,14 +694,14 @@ test "string escapes" {
     try expectOutput("\"a\\\\b\"", "a\\b");
     try expectOutput("\"a\\\"b\"", "a\"b");
     try expectOutput("'a\\'b'", "a'b");
-    try expectFailure("\"a\\qb\"", "compile error at '\"a\\qb\"': unknown escape '\\q'.");
+    try expectFailure("\"a\\qb\"", "compile", "at '\"a\\qb\"': unknown escape '\\q'");
 }
 
 test "string concatenation" {
     try expectOutput("\"foo\" + \"bar\"", "foobar");
     try expectOutput("\"a\" + \"b\" + \"c\"", "abc");
-    try expectFailure("\"score: \" + 10", "runtime error: 'add' expected two numbers or strings, got string and number.");
-    try expectFailure("\"a\" - \"b\"", "runtime error: 'subtract' expected two numbers, got string and string.");
+    try expectFailure("\"score: \" + 10", "type", "'add' expected two numbers or strings, got string and number");
+    try expectFailure("\"a\" - \"b\"", "type", "'subtract' expected two numbers, got string and string");
 }
 
 test "string equality" {
@@ -688,14 +717,14 @@ test "string 'in' operator" {
     try expectOutput("\"ok\" in \"it is ok\"", "true");
     try expectOutput("\"no\" in \"it is ok\"", "false");
     try expectOutput("\"ok\" not in \"it is ok\"", "false");
-    try expectFailure("1 in \"abc\"", "runtime error: 'in' expected two strings, got number and string.");
+    try expectFailure("1 in \"abc\"", "type", "'in' expected two strings, got number and string");
 }
 
 test "unterminated/unsupported strings" {
-    try expectFailure("\"abc", "compile error at '\"abc': unterminated string.");
-    try expectFailure("\"abc\nx\"", "compile error at '\"abc': unterminated string.");
-    try expectFailure("f\"hi\"", "compile error at 'f': string prefixes are not supported (yet).");
-    try expectFailure("m'hi'", "compile error at 'm': string prefixes are not supported (yet).");
+    try expectFailure("\"abc", "compile", "at '\"abc': unterminated string");
+    try expectFailure("\"abc\nx\"", "compile", "at '\"abc': unterminated string");
+    try expectFailure("f\"hi\"", "compile", "at 'f': string prefixes are not supported (yet)");
+    try expectFailure("m'hi'", "compile", "at 'm': string prefixes are not supported (yet)");
 }
 
 test "global declarations" {
@@ -713,33 +742,34 @@ test "assignment is an expression" {
 
 test "constants cannot be reassigned" {
     try expectOutput("PI # 3.14\nPI", "3.14");
-    try expectFailure("PI # 3.14\nPI = 0", "runtime error: 'PI' is constant and cannot be reassigned.");
+    try expectFailure("PI # 3.14\nPI = 0", "frozen", "'PI' is constant and cannot be reassigned");
 }
 
 test "undeclared and redeclared are runtime errors" {
-    try expectFailure("y", "runtime error: undefined variable 'y'.");
-    try expectFailure("y = 5", "runtime error: undefined variable 'y'.");
-    try expectFailure("x : 10\nx : 20", "runtime error: 'x' has already been declared.");
-    try expectFailure("x : 10\nx # 20", "runtime error: 'x' has already been declared.");
+    try expectFailure("y", "undefined", "undefined variable 'y'");
+    try expectFailure("y = 5", "undefined", "undefined variable 'y'");
+    try expectFailure("x : 10\nx : 20", "undefined", "'x' has already been declared");
+    try expectFailure("x : 10\nx # 20", "undefined", "'x' has already been declared");
 }
 
 test "declarations require an initializer" {
-    try expectFailure("x :", "compile error at end: expected expression.");
-    try expectFailure("a : 1\nb : 2\nc : 3\na * b = c", "compile error at '=': invalid assignment target.");
+    try expectFailure("x :", "compile", "at end: expected expression");
+    try expectFailure("a : 1\nb : 2\nc : 3\na * b = c", "compile", "at '=': invalid assignment target");
 }
 
 test "globals reset between runs" {
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(Status.finished, interpretSource("x : 1\nx"));
-    try testing.expectEqual(Status.finished, interpretSource("x : 2\nx"));
+    var report: Report = .{};
+    try testing.expectEqual(Status.finished, interpretSource("x : 1\nx", &report));
+    try testing.expectEqual(Status.finished, interpretSource("x : 2\nx", &report));
 }
 
 test "program scope holds 1024 globals (built-ins don't count)" {
     var buf: [16 * 1024]u8 = undefined;
 
     try expectOutput(try declareGlobals(&buf, 1024, "g1023 + dt * 60"), "1024");
-    try expectFailure(try declareGlobals(&buf, 1025, ""), "compile error at 'g1024': too many globals.");
+    try expectFailure(try declareGlobals(&buf, 1025, ""), "compile", "at 'g1024': too many globals");
 }
 
 test "a name from an earlier eval can still be declared later" {
@@ -757,7 +787,7 @@ test "a name from an earlier eval can still be declared later" {
 test "init, tick, and draw are ordinary names" {
     try expectOutput("draw : 1\ndraw", "1");
     try expectOutput("tick : 2\ninit : tick + 1\ninit", "3");
-    try expectFailure("init + 1", "runtime error: undefined variable 'init'.");
+    try expectFailure("init + 1", "undefined", "undefined variable 'init'");
 }
 
 // TODO: when arrays are added test deep-freeze
@@ -769,7 +799,7 @@ test "bare case expression" {
     try expectOutput("case\n  false -> \"a\"\n  _ -> \"fallback\"\nend", "fallback");
     try expectOutput("x : case\n  true -> 10\nend\nx", "10");
     try expectOutput("case true -> do\n  a : 2\n  a * 3\nend", "6");
-    try expectFailure("case 1 -> \"x\"", "runtime error: condition expected boolean, got number.");
+    try expectFailure("case 1 -> \"x\"", "type", "condition expected boolean, got number");
 }
 
 test "single-pattern case expression" {
@@ -780,7 +810,7 @@ test "single-pattern case expression" {
     try expectOutput("case 9\n  1 -> \"one\"\nend", "nil");
     try expectOutput("x : case \"b\"\n  \"b\" -> 2\nend\nx", "2");
     try expectOutput("1 + case 1\n  1 -> 2\nend", "3");
-    try expectFailure("case\n  > 5 -> \"x\"\nend", "compile error at '>': no left-hand side to compare against.");
+    try expectFailure("case\n  > 5 -> \"x\"\nend", "compile", "at '>': no left-hand side to compare against");
 }
 
 test "multi-pattern case expression" {
@@ -791,7 +821,7 @@ test "multi-pattern case expression" {
 test "guarded case expression" {
     try expectOutput("case 150\n  > 100 if true -> \"epic\"\n  > 100 -> \"great\"\nend", "epic");
     try expectOutput("case 150\n  > 100 if false -> \"epic\"\n  > 100 -> \"great\"\nend", "great");
-    try expectFailure("case 1\n  1 if 2 -> \"x\"\nend", "runtime error: condition expected boolean, got number.");
+    try expectFailure("case 1\n  1 if 2 -> \"x\"\nend", "type", "condition expected boolean, got number");
 }
 
 test "case bodies can assign" {
@@ -802,7 +832,7 @@ test "case bodies can assign" {
 }
 
 test "a broken case subject is a compile error" {
-    try expectFailure("case )\n  1 -> 2\nend", "compile error at ')': expected expression.");
+    try expectFailure("case )\n  1 -> 2\nend", "compile", "at ')': expected expression");
 }
 
 test "newlines around a lone expression are dropped" {
@@ -815,20 +845,22 @@ test "newline between expressions separates" {
     try expectOutput("1\n2", "2");
     try expectOutput("1\n  \n2", "2");
     try expectOutput("1 + 1\n2 * 3", "6");
-    try expectFailure("1 2", "compile error at '2': expected end of statement.");
+    try expectFailure("1 2", "compile", "at '2': expected end of statement");
 }
 
 test "compile errors are reported, not executed" {
-    try expectFailure("(1 + 2", "compile error at end: expected ')' after expression.");
-    try expectFailure("1 +", "compile error at end: expected expression.");
-    try expectFailure("$", "compile error at '$': unexpected character.");
+    try expectFailure("(1 + 2", "compile", "at end: expected ')' after expression");
+    try expectFailure("1 +", "compile", "at end: expected expression");
+    try expectFailure("$", "compile", "at '$': unexpected character");
 }
 
-test "interpretSource returns nonzero on failure" {
+test "interpretSource gives back a crash report on failure" {
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(Status.finished, interpretSource("1 + 1"));
-    try testing.expectEqual(Status.failed, interpretSource("1 +"));
+    var report: Report = .{};
+    try testing.expectEqual(Status.finished, interpretSource("1 + 1", &report));
+    try testing.expectEqual(Status.failed, interpretSource("1 +", &report));
+    try testing.expectEqualStrings("compile\n0\n0\nat end: expected expression", report.text());
 }
 
 test "exceeding local and stack limits are compile errors" {
@@ -845,27 +877,27 @@ test "exceeding local and stack limits are compile errors" {
     try w.writeAll("do\n");
     for (0..256) |i| try w.print("  v{d} : {d}\n", .{ i, i });
     try w.writeAll("end");
-    try expectFailure(w.buffered(), "compile error at 'v255': too many locals in scope.");
+    try expectFailure(w.buffered(), "compile", "at 'v255': too many locals in scope");
 
     w = .fixed(&buf);
     for (0..300) |_| try w.writeAll("1 + (");
     try w.writeAll("1");
     for (0..300) |_| try w.writeAll(")");
-    try expectFailure(w.buffered(), "compile error at '1': expression too deep.");
+    try expectFailure(w.buffered(), "compile", "at '1': expression too deep");
 }
 
 test "unimplemented syntax is a compile error" {
-    try expectFailure("1 + for", "compile error at 'for': not supported (yet).");
-    try expectFailure("x : fn", "compile error at 'fn': not supported (yet).");
-    try expectFailure("this", "compile error at 'this': not supported (yet).");
-    try expectFailure("x : 1\nx.y", "compile error at '.': not supported (yet).");
-    try expectFailure("x : 1\nx(", "compile error at '(': not supported (yet).");
+    try expectFailure("1 + for", "compile", "at 'for': not supported (yet)");
+    try expectFailure("x : fn", "compile", "at 'fn': not supported (yet)");
+    try expectFailure("this", "compile", "at 'this': not supported (yet)");
+    try expectFailure("x : 1\nx.y", "compile", "at '.': not supported (yet)");
+    try expectFailure("x : 1\nx(", "compile", "at '(': not supported (yet)");
 }
 
 test "local constants" {
     try expectOutput("do\n  PI # 3\n  PI * 2\nend", "6");
-    try expectFailure("do\n  PI # 3\n  PI = 4\nend", "compile error at 'PI': 'PI' is constant and cannot be reassigned.");
-    try expectFailure("do\n  PI # 3\n  PI : 4\nend", "compile error at 'PI': 'PI' has already been declared.");
+    try expectFailure("do\n  PI # 3\n  PI = 4\nend", "compile", "at 'PI': 'PI' is constant and cannot be reassigned");
+    try expectFailure("do\n  PI # 3\n  PI : 4\nend", "compile", "at 'PI': 'PI' has already been declared");
 }
 
 test "every comparison pattern" {
@@ -882,9 +914,9 @@ test "case structure" {
     try expectOutput("case 2\n  2 -> case 3\n    3 -> \"inner\"\n  end\n  _ -> \"outer\"\nend", "inner");
     try expectOutput("do\n  a : 5\n  b : 7\n  case b\n    > a -> b - a\n    _ -> 0\n  end\nend", "2");
     try expectOutput("do\n  r : case 1\n    1 -> 10\n  end\n  z : 5\n  r + z\nend", "15");
-    try expectFailure("case 1\n  _ -> 1\n  2 -> 3\nend", "compile error at '2': '_' must be the last branch.");
-    try expectFailure("case 1\n  1 -> 2\n", "compile error at end: expected 'end' to close 'case'.");
-    try expectFailure("case 1\n  _ -> 2\n", "compile error at end: expected 'end' to close 'case'.");
+    try expectFailure("case 1\n  _ -> 1\n  2 -> 3\nend", "compile", "at '2': '_' must be the last branch");
+    try expectFailure("case 1\n  1 -> 2\n", "compile", "at end: expected 'end' to close 'case'");
+    try expectFailure("case 1\n  _ -> 2\n", "compile", "at end: expected 'end' to close 'case'");
 }
 
 test "while loops" {
@@ -892,9 +924,9 @@ test "while loops" {
     try expectOutput("while false\n  1\nend", "nil");
     try expectOutput("x : while false\n  1\nend\nx", "nil");
     try expectOutput("i : 0\nwhile i < 3\n  j : i * 2\n  i = i + 1\n  j\nend", "4");
-    try expectFailure("while 1\n  2\nend", "runtime error: condition expected boolean, got number.");
-    try expectFailure("while true 1 end", "compile error at '1': expected newline after 'while' condition.");
-    try expectFailure("while true\n  1\n", "compile error at end: expected 'end' to close 'while'.");
+    try expectFailure("while 1\n  2\nend", "type", "condition expected boolean, got number");
+    try expectFailure("while true 1 end", "compile", "at '1': expected newline after 'while' condition");
+    try expectFailure("while true\n  1\n", "compile", "at end: expected 'end' to close 'while'");
 }
 
 test "stop statement" {
@@ -902,14 +934,14 @@ test "stop statement" {
     try expectOutput("while true\n  stop\nend", "nil");
     try expectOutput("while true\n  do\n    a : 7\n    case a > 5 -> stop a\n  end\nend", "7");
     try expectOutput("i : 0\nwhile true\n  i = i + 1\n  x : 100 + case i\n    3 -> stop i\n    _ -> 0\n  end\nend", "3");
-    try expectFailure("stop", "compile error at 'stop': 'stop' outside of a loop.");
-    try expectFailure("1 + stop", "compile error at 'stop': expected expression.");
+    try expectFailure("stop", "compile", "at 'stop': 'stop' outside of a loop");
+    try expectFailure("1 + stop", "compile", "at 'stop': expected expression");
 }
 
 test "next statement" {
     try expectOutput("i : 0\ntotal : 0\nwhile i < 6\n  i = i + 1\n  case i % 2 == 0 -> next\n  total = total + i\nend", "9");
     try expectOutput("i : 0\nwhile i < 3\n  i = i + 1\n  a : i\n  case true -> next\nend", "nil");
-    try expectFailure("next", "compile error at 'next': 'next' outside of a loop.");
+    try expectFailure("next", "compile", "at 'next': 'next' outside of a loop");
 }
 
 test "nested loops" {
@@ -921,11 +953,11 @@ test "built-ins" {
     try expectOutput("dt * 60", "1");
     try expectOutput("do\n  dt : 5\n  dt\nend", "5");
     try expectOutput("x : dt\nx * 60", "1");
-    try expectFailure("dt : 1", "compile error at 'dt': 'dt' is a built-in.");
-    try expectFailure("dt # 1", "compile error at 'dt': 'dt' is a built-in.");
-    try expectFailure("dt = 1", "compile error at 'dt': cannot assign to built-in 'dt'.");
-    try expectFailure("do\n  dt = 1\nend", "compile error at 'dt': cannot assign to built-in 'dt'.");
-    try expectFailure("while false\n  dt = 1\nend", "compile error at 'dt': cannot assign to built-in 'dt'.");
+    try expectFailure("dt : 1", "compile", "at 'dt': 'dt' is a built-in");
+    try expectFailure("dt # 1", "compile", "at 'dt': 'dt' is a built-in");
+    try expectFailure("dt = 1", "compile", "at 'dt': cannot assign to built-in 'dt'");
+    try expectFailure("do\n  dt = 1\nend", "compile", "at 'dt': cannot assign to built-in 'dt'");
+    try expectFailure("while false\n  dt = 1\nend", "compile", "at 'dt': cannot assign to built-in 'dt'");
 }
 
 // ---- Machine tests -----------------------------------------------------------------------------
@@ -962,7 +994,7 @@ test "two machines keep separate globals" {
 
     io.beginCapture();
     try testing.expectEqual(Status.failed, evalIn(b, "y"));
-    try testing.expectEqualStrings("runtime error: undefined variable 'y'.\n", io.captured());
+    try expectReport(b, "undefined", "undefined variable 'y'");
 }
 
 test "resetting one machine leaves the other intact" {
@@ -981,7 +1013,8 @@ test "resetting one machine leaves the other intact" {
     io.beginCapture();
     try testing.expectEqual(Status.failed, evalIn(a, "x"));
     try testing.expectEqual(Status.finished, evalIn(b, "x"));
-    try testing.expectEqualStrings("runtime error: undefined variable 'x'.\nfrom b\n", io.captured());
+    try testing.expectEqualStrings("from b\n", io.captured());
+    try expectReport(a, "undefined", "undefined variable 'x'");
 }
 
 test "each machine has DISC, STACK, and HEAP at correct offsets in their own block" {
@@ -1027,6 +1060,17 @@ test "a failed machine refuses later calls" {
     try testing.expectEqualStrings("", io.captured());
 }
 
+test "a crash report is cut off at 1KiB" {
+    const m = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(m);
+    io.beginCapture();
+    defer io.endCapture();
+
+    try testing.expectEqual(Status.failed, evalIn(m, "\"" ++ @as([2000]u8, @splat('a')) ++ "\\q\""));
+    try testing.expectEqual(@as(usize, 1024), noka_report_len(m));
+    try testing.expect(std.mem.startsWith(u8, noka_report(m)[0..1024], "compile\n0\n0\nat '\"aaaa"));
+}
+
 test "resetting a failed machine lets it run again" {
     const m = noka_machine_new() orelse return error.OutOfMemory;
     defer noka_machine_free(m);
@@ -1035,6 +1079,8 @@ test "resetting a failed machine lets it run again" {
     defer io.endCapture();
     try testing.expectEqual(Status.failed, evalIn(m, "y"));
     noka_reset(m);
+
+    try testing.expectEqual(@as(usize, 0), noka_report_len(m));
 
     io.beginCapture();
     try testing.expectEqual(Status.finished, evalIn(m, "1"));
@@ -1050,7 +1096,7 @@ test "eval rejects a length past the disc size" {
     io.beginCapture();
     defer io.endCapture();
     try testing.expectEqual(Status.failed, noka_eval(m, memory.disc.size + 1));
-    try testing.expectEqualStrings("disc error: source too large.\n", io.captured());
+    try expectReport(m, "disc", "source too large");
 }
 
 test "load rejects a length past the disc size" {
@@ -1060,7 +1106,7 @@ test "load rejects a length past the disc size" {
     io.beginCapture();
     defer io.endCapture();
     try testing.expectEqual(Status.failed, noka_load(m, memory.disc.size + 1));
-    try testing.expectEqualStrings("disc error: disc too large.\n", io.captured());
+    try expectReport(m, "disc", "disc too large");
 }
 
 test "load runs a disc's source" {
@@ -1085,7 +1131,7 @@ test "corrupt disc fails to run" {
     io.beginCapture();
     defer io.endCapture();
     try testing.expectEqual(Status.failed, noka_load(m, image.len));
-    try testing.expectEqualStrings("disc error: invalid magic header.\n", io.captured());
+    try expectReport(m, "disc", "invalid magic header");
 }
 
 test "disc with no source fails to run" {
@@ -1098,13 +1144,14 @@ test "disc with no source fails to run" {
     io.beginCapture();
     defer io.endCapture();
     try testing.expectEqual(Status.failed, noka_load(m, image.len));
-    try testing.expectEqualStrings("disc error: disc has no source.\n", io.captured());
+    try expectReport(m, "disc", "disc has no source");
 }
 
 test "interpretDisc rejects an image past the disc size" {
     const big: [memory.disc.size + 1]u8 = @splat(0);
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(Status.failed, interpretDisc(&big));
-    try testing.expectEqualStrings("disc error: disc too large.\n", io.captured());
+    var report: Report = .{};
+    try testing.expectEqual(Status.failed, interpretDisc(&big, &report));
+    try testing.expectEqualStrings("disc\n0\n0\ndisc too large", report.text());
 }

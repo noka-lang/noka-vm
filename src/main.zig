@@ -12,6 +12,7 @@ const noka = @import("noka_vm");
 pub fn main(init: std.process.Init) !u8 {
     const arena = init.arena.allocator();
     const args = try init.minimal.args.toSlice(arena);
+    var report: noka.Report = .{};
 
     if (args.len > 1 and std.mem.eql(u8, args[1], "--disc")) {
         if (args.len < 3) {
@@ -22,7 +23,7 @@ pub fn main(init: std.process.Init) !u8 {
             std.debug.print("failed to read disc: {s}\n", .{@errorName(err)});
             return 2;
         };
-        return if (noka.interpretDisc(image) == .failed) 1 else 0;
+        return finish(noka.interpretDisc(image, &report), report);
     }
 
     // Joining argv means the unquoted `zig build run -- 1 + 2` works too, not just the quoted form.
@@ -31,7 +32,13 @@ pub fn main(init: std.process.Init) !u8 {
     else
         try readAllStdin(init.io, arena);
 
-    return if (noka.interpretSource(source) == .failed) 1 else 0;
+    return finish(noka.interpretSource(source, &report), &report);
+}
+
+fn finish(status: noka.Status, report: *const noka.Report) u8 {
+    if (status != .failed) return 0;
+    std.debug.print("{s}\n", .{report.text()});
+    return 1;
 }
 
 fn readAllStdin(io: std.Io, gpa: std.mem.Allocator) ![]u8 {
