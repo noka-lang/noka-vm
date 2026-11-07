@@ -116,7 +116,7 @@ const Machine = struct {
         self.chunk = .{ .code = self.region(memory.code), .constants = self.slots(memory.constants, Value) };
 
         if (!Compiler.compile(source, &self.chunk, self.heap, &self.report)) return self.fail();
-        if (debug_print_bytecode) debug.disassembleChunk(&self.chunk, "compiled code");
+        if (debug_print_bytecode) debug.disassembleChunk(self, &self.chunk, "compiled code");
 
         var vm = VM{ .machine = self, .chunk = &self.chunk, .stack = self.slots(memory.stack, Value) };
 
@@ -307,7 +307,7 @@ const VM = struct {
     fn run(self: *VM) bool {
         while (true) {
             if (debug_trace_execution) {
-                _ = debug.disassembleInstruction(self.chunk, self.ip);
+                _ = debug.disassembleInstruction(self.machine, self.chunk, self.ip);
             }
 
             const op: OpCode = @enumFromInt(self.readByte());
@@ -449,8 +449,8 @@ const VM = struct {
                     self.push(.{ .number = @floatFromInt(~vi) });
                 },
                 .print => {
-                    self.pop().print();
-                    io.print("\n");
+                    self.pop().print(self.machine);
+                    io.print(self.machine, "\n");
                 },
                 .jump => {
                     const offset = self.readShort();
@@ -531,15 +531,12 @@ const VM = struct {
                     // TODO: real `return` belongs to function calls; a top-level program should
                     // print via an explicit print statement/op instead of leaning on OP_RETURN.
                     if (self.sp > 0) {
-                        self.pop().print();
-                        io.print("\n");
+                        self.pop().print(self.machine);
+                        io.print(self.machine, "\n");
                     }
                     return true;
                 },
-                _ => {
-                    io.printf("runtime error: unknown opcode {d}.\n", .{@intFromEnum(op)});
-                    return false;
-                },
+                _ => unreachable,
             }
         }
     }
@@ -1184,6 +1181,24 @@ test "a tick, draw or init that is not a function fails" {
     noka_reset(m);
     try testing.expectEqual(Status.failed, evalIn(m, "init : true"));
     try expectReport(m, "type", "'init' expected function, got boolean");
+}
+
+test "two machines print through one import with their own handles" {
+    const a = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(a);
+    const b = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(b);
+
+    io.beginCaptureFrom(a);
+    defer io.endCapture();
+    try testing.expectEqual(Status.finished, evalIn(a, "\"from a\""));
+    try testing.expectEqual(Status.finished, evalIn(b, "\"from b\""));
+    try testing.expectEqualStrings("from a\n", io.captured());
+
+    io.beginCaptureFrom(b);
+    try testing.expectEqual(Status.finished, evalIn(a, "1"));
+    try testing.expectEqual(Status.finished, evalIn(b, "2"));
+    try testing.expectEqualStrings("2\n", io.captured());
 }
 
 test "a failed machine refuses tick and draw" {

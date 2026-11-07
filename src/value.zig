@@ -31,12 +31,12 @@ pub const Value = union(enum) {
         };
     }
 
-    pub fn print(self: Value) void {
+    pub fn print(self: Value, m: io.Handle) void {
         switch (self) {
-            .boolean => |b| io.printf("{}", .{b}),
-            .nil => io.printf("nil", .{}),
-            .number => |n| io.printf("{d}", .{n}),
-            .string => |s| io.print(s.bytes),
+            .boolean => |b| io.printf(m, "{}", .{b}),
+            .nil => io.print(m, "nil"),
+            .number => |n| io.printf(m, "{d}", .{n}),
+            .string => |s| io.print(m, s.bytes),
             // TODO: array, object, function, error
         }
     }
