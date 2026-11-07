@@ -51,7 +51,7 @@ pub const Names = struct {
     }
 
     /// Returns the table index that holds `name`, or the empty index where it would go.
-    pub fn probe(self: *const Names, name: *const strings.String) usize {
+    fn probe(self: *const Names, name: *const strings.String) usize {
         var i: usize = @as(usize, name.hash) & (table_max - 1);
         while (self.table[i]) |idx| : (i = (i + 1) & (table_max - 1)) {
             if (self.pool[idx].name == name) return i;

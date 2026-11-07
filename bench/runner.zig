@@ -17,10 +17,11 @@ pub fn main(init: std.process.Init) !u8 {
     const arena = init.arena.allocator();
     const io = init.io;
     const args = try init.minimal.args.toSlice(arena);
+    var report: noka.Report = .{};
 
     if (args.len == 3 and std.mem.eql(u8, args[1], "check")) {
         const source = try readProgram(io, arena, args[2]);
-        return if (noka.interpretSource(source) == .failed) 1 else 0;
+        return if (noka.interpretSource(source, &report) == .failed) 1 else 0;
     }
 
     if ((args.len == 4 or args.len == 5) and std.mem.eql(u8, args[1], "time")) {
@@ -29,13 +30,13 @@ pub fn main(init: std.process.Init) !u8 {
         if (runs == 0 or machines == 0) return usage();
         const source = try readProgram(io, arena, args[3]);
 
-        if (noka.interpretSource(source) == .failed) return 1;
+        if (noka.interpretSource(source, &report) == .failed) return 1;
 
         const samples = try arena.alloc(i96, runs);
         for (samples) |*sample| {
             const start = std.Io.Timestamp.now(io, .awake);
             for (0..machines) |_| {
-                if (noka.interpretSource(source) == .failed) return 1;
+                if (noka.interpretSource(source, &report) == .failed) return 1;
             }
             sample.* = start.untilNow(io, .awake).toNanoseconds();
         }

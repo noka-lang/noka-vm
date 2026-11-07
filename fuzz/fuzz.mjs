@@ -112,8 +112,10 @@ function runNative(source) {
   const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
   if (r.signal) return { kind: 'crash', detail: `killed by ${r.signal}: ${firstLine(r.stderr)}` };
   if (r.status === 0) return { kind: 'clean', how: 'ok' };
-  if (r.status === 1 && /compile error/.test(out)) return { kind: 'clean', how: 'compile' };
-  if (r.status === 1 && /(runtime|disc) error/.test(out)) return { kind: 'clean', how: 'runtime' };
+  // A failed program prints its crash report to stderr, and the report's first line is the reason.
+  const reason = r.status === 1 ? (r.stderr ?? '').split('\n')[0] : '';
+  if (reason === 'compile') return { kind: 'clean', how: 'compile' };
+  if (/^(disc|frozen|math|oom|type|undefined)$/.test(reason)) return { kind: 'clean', how: 'runtime' };
   return { kind: 'crash', detail: `exit ${r.status}: ${firstLine(out)}` };
 }
 

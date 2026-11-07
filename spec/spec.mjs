@@ -112,7 +112,8 @@ function run(block, entry) {
   if (r.error?.code === 'ETIMEDOUT') return { kind: 'crash', detail: 'timed out after 3 s', output };
   if (r.signal) return { kind: 'crash', detail: `killed by ${r.signal}`, output };
   if (r.status === 0) return { kind: 'ok', stdout: r.stdout ?? '', output };
-  if (r.status === 1) return { kind: /compile error/.test(output) ? 'compile_error' : 'runtime_error', output };
+  // A failed program prints its crash report to stderr, and the report's first line is the reason.
+  if (r.status === 1) return { kind: /^compile\n/.test(r.stderr ?? '') ? 'compile_error' : 'runtime_error', output };
   return { kind: 'crash', detail: `exit status ${r.status}`, output };
 }
 
