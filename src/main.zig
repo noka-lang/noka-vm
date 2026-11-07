@@ -22,7 +22,7 @@ pub fn main(init: std.process.Init) !u8 {
             std.debug.print("failed to read disc: {s}\n", .{@errorName(err)});
             return 2;
         };
-        return @intCast(noka.interpretDisc(image));
+        return if (noka.interpretDisc(image) == .failed) 1 else 0;
     }
 
     // Joining argv means the unquoted `zig build run -- 1 + 2` works too, not just the quoted form.
@@ -31,7 +31,7 @@ pub fn main(init: std.process.Init) !u8 {
     else
         try readAllStdin(init.io, arena);
 
-    return @intCast(noka.interpretSource(source));
+    return if (noka.interpretSource(source) == .failed) 1 else 0;
 }
 
 fn readAllStdin(io: std.Io, gpa: std.mem.Allocator) ![]u8 {

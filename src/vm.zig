@@ -15,11 +15,22 @@ const debug_trace_execution = false;
 
 // ---- machine -----------------------------------------------------------------------------------
 
+pub const Status = enum(i32) {
+    /// The program is calling `noka_tick` and `noka_draw`.
+    running = 0,
+    /// The program has no `tick` or `draw`, it ran once and is done.
+    finished = 1,
+    /// The program has halted due to a compile/runtime error or a bad disc.
+    /// `noka_reset` clears this status.
+    failed = 2,
+};
+
 const Machine = struct {
     block: [memory.size]u8 align(16) = undefined,
     chunk: Chunk = undefined,
     heap: *memory.Heap = undefined,
     globals: *[memory.globals_slots]Value = undefined,
+    failed: bool = false,
 
     fn create() ?*Machine {
         const m = std.heap.page_allocator.create(Machine) catch return null;
@@ -47,36 +58,44 @@ const Machine = struct {
 
     fn reset(self: *Machine) void {
         self.heap.reset();
+        self.failed = false;
     }
 
-    fn eval(self: *Machine, len: usize) i32 {
+    fn fail(self: *Machine) Status {
+        self.failed = true;
+        return .failed;
+    }
+
+    fn eval(self: *Machine, len: usize) Status {
+        if (self.failed) return .failed;
         const disc = self.region(memory.disc);
 
         if (len > disc.len) {
             io.print("disc error: source too large.\n");
-            return 1;
+            return self.fail();
         }
 
         return self.compileAndRun(disc[0..len]);
     }
 
-    fn loadDisc(self: *Machine, len: usize) i32 {
+    fn loadDisc(self: *Machine, len: usize) Status {
+        if (self.failed) return .failed;
         const disc = self.region(memory.disc);
 
         if (len > disc.len) {
             io.print("disc error: disc too large.\n");
-            return 1;
+            return self.fail();
         }
 
         const image = disc[0..len];
         const header = disc_mod.parse(image) catch |e| {
             io.printf("disc error: {s}.\n", .{disc_mod.describe(e)});
-            return 1;
+            return self.fail();
         };
 
         const src = header.section(image, .src) orelse {
             io.print("disc error: disc has no source.\n");
-            return 1;
+            return self.fail();
         };
 
         // TODO: handle the rest of the disc sections
@@ -84,28 +103,29 @@ const Machine = struct {
         return self.compileAndRun(src);
     }
 
-    fn compileAndRun(self: *Machine, source: []const u8) i32 {
+    fn compileAndRun(self: *Machine, source: []const u8) Status {
         self.chunk = .{ .code = self.region(memory.code), .constants = self.slots(memory.constants, Value) };
 
-        if (!Compiler.compile(source, &self.chunk, self.heap)) return 1;
+        if (!Compiler.compile(source, &self.chunk, self.heap)) return self.fail();
         if (debug_print_bytecode) debug.disassembleChunk(&self.chunk, "compiled code");
 
         var vm = VM{ .machine = self, .chunk = &self.chunk, .stack = self.slots(memory.stack, Value) };
 
-        return if (vm.run()) 0 else 1;
+        return if (vm.run()) .finished else self.fail();
     }
 };
 
 // ---- exports -----------------------------------------------------------------------------------
 
-export fn noka_new() ?*Machine {
+export fn noka_machine_new() ?*Machine {
     return Machine.create();
 }
 
-export fn noka_free(m: *Machine) void {
+export fn noka_machine_free(m: *Machine) void {
     m.destroy();
 }
 
+/// Clear a machine's globals and strings, and revive a failed machine.
 export fn noka_reset(m: *Machine) void {
     m.reset();
 }
@@ -114,35 +134,33 @@ export fn noka_memory(m: *Machine) [*]u8 {
     return &m.block;
 }
 
-/// Returns 0 on success, non-zero on error.
-export fn noka_eval(m: *Machine, len: usize) i32 {
+export fn noka_eval(m: *Machine, len: usize) Status {
     return m.eval(len);
 }
 
-/// Returns 0 on success, non-zero on error.
-export fn noka_load_disc(m: *Machine, len: usize) i32 {
+export fn noka_load(m: *Machine, len: usize) Status {
     return m.loadDisc(len);
 }
 
-pub fn interpretSource(source: []const u8) i32 {
+pub fn interpretSource(source: []const u8) Status {
     const m = Machine.create() orelse {
         io.print("out of memory.\n");
-        return 1;
+        return .failed;
     };
     defer m.destroy();
 
     return m.compileAndRun(source);
 }
 
-pub fn interpretDisc(image: []const u8) i32 {
+pub fn interpretDisc(image: []const u8) Status {
     const m = Machine.create() orelse {
         io.print("out of memory.\n");
-        return 1;
+        return .failed;
     };
     defer m.destroy();
     if (image.len > memory.disc.size) {
         io.print("disc error: disc too large.\n");
-        return 1;
+        return .failed;
     }
     @memcpy(m.region(memory.disc)[0..image.len], image);
 
@@ -477,7 +495,7 @@ fn expectOutput(source: []const u8, expected: []const u8) !void {
     const code = interpretSource(source);
 
     try testing.expectEqualStrings(expected, std.mem.trimEnd(u8, io.captured(), "\n"));
-    try testing.expectEqual(@as(i32, 0), code);
+    try testing.expectEqual(Status.finished, code);
 }
 
 fn expectFailure(source: []const u8, expected: []const u8) !void {
@@ -486,10 +504,10 @@ fn expectFailure(source: []const u8, expected: []const u8) !void {
     const code = interpretSource(source);
 
     try testing.expectEqualStrings(expected, std.mem.trimEnd(u8, io.captured(), "\n"));
-    try testing.expectEqual(@as(i32, 1), code);
+    try testing.expectEqual(Status.failed, code);
 }
 
-fn evalIn(m: *Machine, source: []const u8) i32 {
+fn evalIn(m: *Machine, source: []const u8) Status {
     @memcpy(noka_memory(m)[0x00000..][0..source.len], source);
     return noka_eval(m, source.len);
 }
@@ -713,8 +731,8 @@ test "declarations require an initializer" {
 test "globals reset between runs" {
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(@as(i32, 0), interpretSource("x : 1\nx"));
-    try testing.expectEqual(@as(i32, 0), interpretSource("x : 2\nx"));
+    try testing.expectEqual(Status.finished, interpretSource("x : 1\nx"));
+    try testing.expectEqual(Status.finished, interpretSource("x : 2\nx"));
 }
 
 test "program scope holds 1024 globals (built-ins don't count)" {
@@ -724,16 +742,16 @@ test "program scope holds 1024 globals (built-ins don't count)" {
     try expectFailure(try declareGlobals(&buf, 1025, ""), "compile error at 'g1024': too many globals.");
 }
 
-test "using a variable in the REPL before it is declared can still be declared later" {
-    const m = noka_new().?;
-    defer noka_free(m);
+test "a name from an earlier eval can still be declared later" {
+    const m = noka_machine_new().?;
+    defer noka_machine_free(m);
     io.beginCapture();
     defer io.endCapture();
 
-    try testing.expectEqual(@as(i32, 1), evalIn(m, "y")); // runtime error: undefined variable 'y'.
-    try testing.expectEqual(@as(i32, 0), evalIn(m, "y : 2")); // nil
-    try testing.expectEqual(@as(i32, 0), evalIn(m, "y")); // 2
-    try testing.expectEqualStrings("runtime error: undefined variable 'y'.\nnil\n2\n", io.captured());
+    try testing.expectEqual(Status.finished, evalIn(m, "while false\n  y\nend")); // nil
+    try testing.expectEqual(Status.finished, evalIn(m, "y : 2")); // nil
+    try testing.expectEqual(Status.finished, evalIn(m, "y")); // 2
+    try testing.expectEqualStrings("nil\nnil\n2\n", io.captured());
 }
 
 test "init, tick, and draw are ordinary names" {
@@ -809,8 +827,8 @@ test "compile errors are reported, not executed" {
 test "interpretSource returns nonzero on failure" {
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(@as(i32, 0), interpretSource("1 + 1"));
-    try testing.expectEqual(@as(i32, 1), interpretSource("1 +"));
+    try testing.expectEqual(Status.finished, interpretSource("1 + 1"));
+    try testing.expectEqual(Status.failed, interpretSource("1 +"));
 }
 
 test "exceeding local and stack limits are compile errors" {
@@ -918,66 +936,66 @@ test "a machine made with create runs a program" {
 
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(@as(i32, 0), m.compileAndRun("x : 6\nx * 7"));
+    try testing.expectEqual(Status.finished, m.compileAndRun("x : 6\nx * 7"));
     try testing.expectEqualStrings("42\n", io.captured());
 }
 
 test "two machines keep separate globals" {
-    const a = noka_new() orelse return error.OutOfMemory;
-    defer noka_free(a);
-    const b = noka_new() orelse return error.OutOfMemory;
-    defer noka_free(b);
+    const a = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(a);
+    const b = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(b);
 
     io.beginCapture();
     defer io.endCapture();
 
     // declare `x` in both machines, there should not be any redeclaration error
-    try testing.expectEqual(@as(i32, 0), evalIn(a, "x : 1"));
-    try testing.expectEqual(@as(i32, 0), evalIn(b, "x : 2"));
-    try testing.expectEqual(@as(i32, 0), evalIn(a, "y : \"only a\""));
+    try testing.expectEqual(Status.finished, evalIn(a, "x : 1"));
+    try testing.expectEqual(Status.finished, evalIn(b, "x : 2"));
+    try testing.expectEqual(Status.finished, evalIn(a, "y : \"only a\""));
 
     io.beginCapture();
-    try testing.expectEqual(@as(i32, 0), evalIn(a, "x"));
-    try testing.expectEqual(@as(i32, 0), evalIn(b, "x"));
-    try testing.expectEqual(@as(i32, 0), evalIn(a, "y"));
+    try testing.expectEqual(Status.finished, evalIn(a, "x"));
+    try testing.expectEqual(Status.finished, evalIn(b, "x"));
+    try testing.expectEqual(Status.finished, evalIn(a, "y"));
     try testing.expectEqualStrings("1\n2\nonly a\n", io.captured());
 
     io.beginCapture();
-    try testing.expectEqual(@as(i32, 1), evalIn(b, "y"));
+    try testing.expectEqual(Status.failed, evalIn(b, "y"));
     try testing.expectEqualStrings("runtime error: undefined variable 'y'.\n", io.captured());
 }
 
 test "resetting one machine leaves the other intact" {
-    const a = noka_new() orelse return error.OutOfMemory;
-    defer noka_free(a);
-    const b = noka_new() orelse return error.OutOfMemory;
-    defer noka_free(b);
+    const a = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(a);
+    const b = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(b);
 
     io.beginCapture();
     defer io.endCapture();
 
-    try testing.expectEqual(@as(i32, 0), evalIn(a, "x : \"from a\""));
-    try testing.expectEqual(@as(i32, 0), evalIn(b, "x : \"from b\""));
+    try testing.expectEqual(Status.finished, evalIn(a, "x : \"from a\""));
+    try testing.expectEqual(Status.finished, evalIn(b, "x : \"from b\""));
     noka_reset(a);
 
     io.beginCapture();
-    try testing.expectEqual(@as(i32, 1), evalIn(a, "x"));
-    try testing.expectEqual(@as(i32, 0), evalIn(b, "x"));
+    try testing.expectEqual(Status.failed, evalIn(a, "x"));
+    try testing.expectEqual(Status.finished, evalIn(b, "x"));
     try testing.expectEqualStrings("runtime error: undefined variable 'x'.\nfrom b\n", io.captured());
 }
 
 test "each machine has DISC, STACK, and HEAP at correct offsets in their own block" {
-    const a = noka_new() orelse return error.OutOfMemory;
-    defer noka_free(a);
-    const b = noka_new() orelse return error.OutOfMemory;
-    defer noka_free(b);
+    const a = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(a);
+    const b = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(b);
 
     io.beginCapture();
     defer io.endCapture();
 
     // DISC at 0x00000
-    try testing.expectEqual(@as(i32, 0), evalIn(a, "do\n  n : 42\n  s : \"from \" + \"machine a\"\n  n\nend"));
-    try testing.expectEqual(@as(i32, 0), evalIn(b, "do\n  n : 7\n  s : \"from \" + \"machine b\"\n  n\nend"));
+    try testing.expectEqual(Status.finished, evalIn(a, "do\n  n : 42\n  s : \"from \" + \"machine a\"\n  n\nend"));
+    try testing.expectEqual(Status.finished, evalIn(b, "do\n  n : 7\n  s : \"from \" + \"machine b\"\n  n\nend"));
     try testing.expectEqualStrings("42\n7\n", io.captured());
 
     // STACK at 0x47000
@@ -995,63 +1013,91 @@ test "each machine has DISC, STACK, and HEAP at correct offsets in their own blo
     try testing.expect(std.mem.indexOf(u8, b_heap, "from machine a") == null);
 }
 
+test "a failed machine refuses later calls" {
+    const m = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(m);
+
+    io.beginCapture();
+    defer io.endCapture();
+    try testing.expectEqual(Status.failed, evalIn(m, "y"));
+
+    io.beginCapture();
+    try testing.expectEqual(Status.failed, evalIn(m, "1"));
+    try testing.expectEqual(Status.failed, noka_load(m, 0));
+    try testing.expectEqualStrings("", io.captured());
+}
+
+test "resetting a failed machine lets it run again" {
+    const m = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(m);
+
+    io.beginCapture();
+    defer io.endCapture();
+    try testing.expectEqual(Status.failed, evalIn(m, "y"));
+    noka_reset(m);
+
+    io.beginCapture();
+    try testing.expectEqual(Status.finished, evalIn(m, "1"));
+    try testing.expectEqualStrings("1\n", io.captured());
+}
+
 // ---- Disc tests --------------------------------------------------------------------------------
 
 test "eval rejects a length past the disc size" {
-    const m = noka_new() orelse return error.OutOfMemory;
-    defer noka_free(m);
+    const m = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(m);
 
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(@as(i32, 1), noka_eval(m, memory.disc.size + 1));
+    try testing.expectEqual(Status.failed, noka_eval(m, memory.disc.size + 1));
     try testing.expectEqualStrings("disc error: source too large.\n", io.captured());
 }
 
-test "load_disc rejects a length past the disc size" {
-    const m = noka_new() orelse return error.OutOfMemory;
-    defer noka_free(m);
+test "load rejects a length past the disc size" {
+    const m = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(m);
 
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(@as(i32, 1), noka_load_disc(m, memory.disc.size + 1));
+    try testing.expectEqual(Status.failed, noka_load(m, memory.disc.size + 1));
     try testing.expectEqualStrings("disc error: disc too large.\n", io.captured());
 }
 
-test "load_disc runs a disc's source" {
-    const m = noka_new() orelse return error.OutOfMemory;
-    defer noka_free(m);
+test "load runs a disc's source" {
+    const m = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(m);
 
     @memset(m.region(memory.disc), 0);
     const image = disc_mod.forgeDisc(m.region(memory.disc), "1 + 2 * 3");
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(@as(i32, 0), noka_load_disc(m, image.len));
+    try testing.expectEqual(Status.finished, noka_load(m, image.len));
     try testing.expectEqualStrings("7\n", io.captured());
 }
 
 test "corrupt disc fails to run" {
-    const m = noka_new() orelse return error.OutOfMemory;
-    defer noka_free(m);
+    const m = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(m);
 
     @memset(m.region(memory.disc), 0);
     const image = disc_mod.forgeDisc(m.region(memory.disc), "1 + 2 * 3");
     @memcpy(image[0..4], "KANO");
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(@as(i32, 1), noka_load_disc(m, image.len));
+    try testing.expectEqual(Status.failed, noka_load(m, image.len));
     try testing.expectEqualStrings("disc error: invalid magic header.\n", io.captured());
 }
 
 test "disc with no source fails to run" {
-    const m = noka_new() orelse return error.OutOfMemory;
-    defer noka_free(m);
+    const m = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(m);
 
     @memset(m.region(memory.disc), 0);
     const image = disc_mod.forgeDisc(m.region(memory.disc), "1 + 2 * 3");
     std.mem.writeInt(u16, image[0x16..0x18], 0, .little);
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(@as(i32, 1), noka_load_disc(m, image.len));
+    try testing.expectEqual(Status.failed, noka_load(m, image.len));
     try testing.expectEqualStrings("disc error: disc has no source.\n", io.captured());
 }
 
@@ -1059,6 +1105,6 @@ test "interpretDisc rejects an image past the disc size" {
     const big: [memory.disc.size + 1]u8 = @splat(0);
     io.beginCapture();
     defer io.endCapture();
-    try testing.expectEqual(@as(i32, 1), interpretDisc(&big));
+    try testing.expectEqual(Status.failed, interpretDisc(&big));
     try testing.expectEqualStrings("disc error: disc too large.\n", io.captured());
 }
