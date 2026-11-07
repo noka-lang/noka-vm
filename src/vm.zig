@@ -120,7 +120,52 @@ const Machine = struct {
 
         var vm = VM{ .machine = self, .chunk = &self.chunk, .stack = self.slots(memory.stack, Value) };
 
-        return if (vm.run()) .finished else self.fail();
+        if (!vm.run()) return self.fail();
+        if (!self.callIfDeclared("init")) return self.fail();
+
+        return self.lifecycleStatus();
+    }
+
+    fn tick(self: *Machine) Status {
+        if (self.failed) return .failed;
+        if (!self.callIfDeclared("tick")) return self.fail();
+
+        return self.lifecycleStatus();
+    }
+
+    fn draw(self: *Machine) Status {
+        if (self.failed) return .failed;
+        if (!self.callIfDeclared("draw")) return self.fail();
+        // TODO: collect garbage after draw
+
+        return self.lifecycleStatus();
+    }
+
+    fn lifecycleStatus(self: *Machine) Status {
+        if (self.declaredSlot("tick") != null or self.declaredSlot("draw") != null) return .running;
+
+        return .finished;
+    }
+
+    /// Calls the program-scope function `name` if the program declared it.
+    /// If the call fails, return false and write the crash report.
+    fn callIfDeclared(self: *Machine, comptime name: []const u8) bool {
+        const slot = self.declaredSlot(name) orelse return true;
+        const value = self.globals[slot];
+
+        // TODO: call `value` once function exist
+        self.report.write(.type, "'" ++ name ++ "' expected function, got {s}", .{value.typeName()});
+        return false;
+    }
+
+    /// Returns the GLOBALS slot of the program-scope `name`, or null if it isn't declared.
+    /// Built-ins are not checked.
+    fn declaredSlot(self: *Machine, name: []const u8) ?u16 {
+        const string = self.heap.strings.lookup(name) orelse return null;
+        const slot = self.heap.names.find(string) orelse return null;
+        if (!self.heap.names.pool[slot].declared) return null;
+
+        return slot;
     }
 };
 
@@ -158,6 +203,14 @@ export fn noka_eval(m: *Machine, len: usize) Status {
 
 export fn noka_load(m: *Machine, len: usize) Status {
     return m.loadDisc(len);
+}
+
+export fn noka_tick(m: *Machine) Status {
+    return m.tick();
+}
+
+export fn noka_draw(m: *Machine) Status {
+    return m.draw();
 }
 
 /// Run `source` in a fresh machine, `report` is given the crash report on failure.
@@ -789,8 +842,14 @@ test "a name from an earlier eval can still be declared later" {
 }
 
 test "init, tick, and draw are ordinary names" {
-    try expectOutput("draw : 1\ndraw", "1");
-    try expectOutput("tick : 2\ninit : tick + 1\ninit", "3");
+    const m = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(m);
+    io.beginCapture();
+    defer io.endCapture();
+
+    try testing.expectEqual(Status.running, evalIn(m, "draw : 1\ndraw"));
+    try testing.expectEqual(Status.running, evalIn(m, "tick : draw + 1\ntick"));
+    try testing.expectEqualStrings("1\n2\n", io.captured());
     try expectFailure("init + 1", "undefined", "undefined variable 'init'");
 }
 
@@ -1073,6 +1132,70 @@ test "a crash report is cut off at 1KiB" {
     try testing.expectEqual(Status.failed, evalIn(m, "\"" ++ @as([2000]u8, @splat('a')) ++ "\\q\""));
     try testing.expectEqual(@as(usize, 1024), noka_report_len(m));
     try testing.expect(std.mem.startsWith(u8, noka_report(m)[0..1024], "compile\n0\n0\nat '\"aaaa"));
+}
+
+test "a program without tick or draw is finished" {
+    const m = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(m);
+    io.beginCapture();
+    defer io.endCapture();
+
+    try testing.expectEqual(Status.finished, evalIn(m, "x : 1"));
+    try testing.expectEqual(Status.finished, noka_tick(m));
+    try testing.expectEqual(Status.finished, noka_draw(m));
+}
+
+test "a program that declares tick or draw is running" {
+    const a = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(a);
+    const b = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(b);
+    io.beginCapture();
+    defer io.endCapture();
+
+    try testing.expectEqual(Status.running, evalIn(a, "tick : 1"));
+    try testing.expectEqual(Status.running, evalIn(b, "draw : 1"));
+}
+
+test "a name that is only read is not declared" {
+    const m = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(m);
+    io.beginCapture();
+    defer io.endCapture();
+
+    try testing.expectEqual(Status.finished, evalIn(m, "while false\n  tick\nend"));
+}
+
+test "a tick, draw or init that is not a function fails" {
+    const m = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(m);
+    io.beginCapture();
+    defer io.endCapture();
+
+    try testing.expectEqual(Status.running, evalIn(m, "tick : 1\ndraw : nil"));
+    try testing.expectEqual(Status.failed, noka_tick(m));
+    try expectReport(m, "type", "'tick' expected function, got number");
+
+    noka_reset(m);
+    try testing.expectEqual(Status.running, evalIn(m, "draw : nil"));
+    try testing.expectEqual(Status.failed, noka_draw(m));
+    try expectReport(m, "type", "'draw' expected function, got nil");
+
+    noka_reset(m);
+    try testing.expectEqual(Status.failed, evalIn(m, "init : true"));
+    try expectReport(m, "type", "'init' expected function, got boolean");
+}
+
+test "a failed machine refuses tick and draw" {
+    const m = noka_machine_new() orelse return error.OutOfMemory;
+    defer noka_machine_free(m);
+    io.beginCapture();
+    defer io.endCapture();
+
+    try testing.expectEqual(Status.failed, evalIn(m, "tick : 1\ny"));
+    try testing.expectEqual(Status.failed, noka_tick(m));
+    try testing.expectEqual(Status.failed, noka_draw(m));
+    try expectReport(m, "undefined", "undefined variable 'y'");
 }
 
 test "resetting a failed machine lets it run again" {

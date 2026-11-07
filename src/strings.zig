@@ -40,6 +40,11 @@ pub const Strings = struct {
         };
     }
 
+    /// Return the interned copy of `text`, or null
+    pub fn lookup(self: *const Strings, text: []const u8) ?*const String {
+        return self.find(text, std.hash.Fnv1a_32.hash(text));
+    }
+
     pub fn build(self: *Strings) Builder {
         return .{ .strings = self, .start = self.arena_used };
     }

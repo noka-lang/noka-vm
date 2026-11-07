@@ -32,10 +32,8 @@ pub const Names = struct {
     /// one already).
     /// Returns null when every slot is taken.
     pub fn slot(self: *Names, name: *const strings.String) ?u16 {
-        var i: usize = @as(usize, name.hash) & (table_max - 1);
-        while (self.table[i]) |idx| : (i = (i + 1) & (table_max - 1)) {
-            if (self.pool[idx].name == name) return idx;
-        }
+        const i = self.probe(name);
+        if (self.table[i]) |idx| return idx;
 
         if (self.pool_count == slots_max) return null;
 
@@ -45,6 +43,21 @@ pub const Names = struct {
         self.table[i] = idx;
 
         return idx;
+    }
+
+    /// Returns the slot owned by `name`, or null.
+    pub fn find(self: *const Names, name: *const strings.String) ?u16 {
+        return self.table[self.probe(name)];
+    }
+
+    /// Returns the table index that holds `name`, or the empty index where it would go.
+    pub fn probe(self: *const Names, name: *const strings.String) usize {
+        var i: usize = @as(usize, name.hash) & (table_max - 1);
+        while (self.table[i]) |idx| : (i = (i + 1) & (table_max - 1)) {
+            if (self.pool[idx].name == name) return i;
+        }
+
+        return i;
     }
 
     /// Marks the global at `idx` as declared and gives it `mutability`.
@@ -77,6 +90,18 @@ test "a name that exceeds the last slot gets no slot" {
     for (fakes[0..slots_max], 0..) |*f, i| try std.testing.expectEqual(@as(?u16, @intCast(i)), names.slot(f));
     try std.testing.expectEqual(null, names.slot(&fakes[slots_max]));
     try std.testing.expectEqual(5, names.slot(&fakes[5]));
+}
+
+test "find never gives a name a slot" {
+    var table: strings.Strings = .{};
+    var names: Names = .{};
+    const x = table.intern("x").?;
+    const y = table.intern("y").?;
+    _ = names.slot(x);
+
+    try std.testing.expectEqual(0, names.find(x));
+    try std.testing.expectEqual(null, names.find(y));
+    try std.testing.expectEqual(1, names.slot(y));
 }
 
 test "reset forgets every name" {
