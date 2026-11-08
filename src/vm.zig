@@ -140,12 +140,12 @@ const Machine = struct {
         const slot = self.declaredSlot(function) orelse return true;
         const value = self.globals[slot];
 
-        // TODO: call `value` once function exist
+        // TODO: call `value` once functions exist
         self.report.write(.type, "'" ++ @tagName(function) ++ "' expected function, got {s}", .{value.typeName()});
         return false;
     }
 
-    /// Returns the GLOBALS slot `function`, or null if the program hasn't declared it.
+    /// Returns the GLOBALS slot of `function`, or null if the program hasn't declared it.
     /// Built-ins are not checked.
     fn declaredSlot(self: *Machine, function: LifecycleFn) ?u16 {
         const name = self.heap.strings.lookup(@tagName(function)) orelse return null;
@@ -1115,6 +1115,8 @@ test "a cut-off crash report never ends partway through a character" {
     io.beginCapture();
     defer io.endCapture();
 
+    // The report's first 17 bytes are `compile\n0\n0\nat '"`, so 1006 'a's end at byte 1022.
+    // The two bytes of 'é' would sit at 1023 and 1024, which would get cut off.
     const source = "\"" ++ @as([1006]u8, @splat('a')) ++ "é" ++ @as([1006]u8, @splat('a')) ++ "\\q\"";
     try testing.expectEqual(Status.failed, evalIn(m, source));
     try testing.expectEqual(@as(usize, report_mod.size - 1), noka_report_len(m));
