@@ -19,6 +19,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { crashReason } from '../tools/report.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const languagePath = join(here, '..', 'LANGUAGE.md');
@@ -112,8 +113,7 @@ function run(block, entry) {
   if (r.error?.code === 'ETIMEDOUT') return { kind: 'crash', detail: 'timed out after 3 s', output };
   if (r.signal) return { kind: 'crash', detail: `killed by ${r.signal}`, output };
   if (r.status === 0) return { kind: 'ok', stdout: r.stdout ?? '', output };
-  // A failed program prints its crash report to stderr, and the report's first line is the reason.
-  if (r.status === 1) return { kind: /^compile\n/.test(r.stderr ?? '') ? 'compile_error' : 'runtime_error', output };
+  if (r.status === 1) return { kind: crashReason(r.stderr) === 'compile' ? 'compile_error' : 'runtime_error', output };
   return { kind: 'crash', detail: `exit status ${r.status}`, output };
 }
 

@@ -13,16 +13,22 @@ let vm = await instantiate();
 async function instantiate() {
   let memory;
   let output = '';
+  // Every print must carry the handle of the machine running the program.
+  let running = 0;
+  let wrongHandle = null;
   const decoder = new TextDecoder();
   const { instance } = await WebAssembly.instantiate(bytes, {
     env: {
-      host_print(ptr, len) {
+      noka_host_print(m, ptr, len) {
+        if (m !== running) wrongHandle = m;
         output += decoder.decode(new Uint8Array(memory.buffer, ptr, len));
       },
     },
   });
   const e = instance.exports;
   memory = e.memory;
+  // A second machine stays alive, so the running machine is never the only one.
+  if (!e.noka_machine_new()) throw new Error('noka_machine_new returned null');
   return {
     run(source) {
       const src = new TextEncoder().encode(source);
@@ -35,8 +41,13 @@ async function instantiate() {
       // noka_machine_new can grow memory, which detaches older views, so take the view after it.
       new Uint8Array(memory.buffer, e.noka_memory(m) + DISC.offset, src.length).set(src);
       output = '';
+      running = m;
+      wrongHandle = null;
       const status = e.noka_eval(m, src.length);
       e.noka_machine_free(m);
+      if (wrongHandle !== null) {
+        return { kind: 'crash', output, detail: `noka_host_print got handle ${wrongHandle}, expected ${m}` };
+      }
       return { kind: status >= 0 && status <= 2 ? 'clean' : 'crash', output, detail: `noka_eval returned ${status}` };
     },
   };

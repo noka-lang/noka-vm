@@ -21,7 +21,11 @@ pub fn main(init: std.process.Init) !u8 {
 
     if (args.len == 3 and std.mem.eql(u8, args[1], "check")) {
         const source = try readProgram(io, arena, args[2]);
-        return if (noka.interpretSource(source, &report) == .failed) 1 else 0;
+        if (noka.interpretSource(source, &report) == .failed) {
+            std.debug.print("{s}\n", .{report.text()});
+            return 1;
+        }
+        return 0;
     }
 
     if ((args.len == 4 or args.len == 5) and std.mem.eql(u8, args[1], "time")) {

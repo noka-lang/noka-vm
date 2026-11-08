@@ -45,9 +45,15 @@ pub const Names = struct {
         return idx;
     }
 
-    /// Returns the slot owned by `name`, or null.
+    /// Returns the slot owned by `name`, or null. Does not give `name` a slot.
     pub fn find(self: *const Names, name: *const strings.String) ?u16 {
         return self.table[self.probe(name)];
+    }
+
+    /// Returns the slot of `name` if a program declared it, or null.
+    pub fn findDeclared(self: *const Names, name: *const strings.String) ?u16 {
+        const idx = self.find(name) orelse return null;
+        return if (self.pool[idx].declared) idx else null;
     }
 
     /// Returns the table index that holds `name`, or the empty index where it would go.
@@ -102,6 +108,17 @@ test "find never gives a name a slot" {
     try std.testing.expectEqual(0, names.find(x));
     try std.testing.expectEqual(null, names.find(y));
     try std.testing.expectEqual(1, names.slot(y));
+}
+
+test "findDeclared skips a name that only has a slot" {
+    var table: strings.Strings = .{};
+    var names: Names = .{};
+    const x = table.intern("x").?;
+    const idx = names.slot(x).?;
+
+    try std.testing.expectEqual(null, names.findDeclared(x));
+    try names.declare(idx, .mutable);
+    try std.testing.expectEqual(idx, names.findDeclared(x));
 }
 
 test "reset forgets every name" {

@@ -40,7 +40,7 @@ pub const Strings = struct {
         };
     }
 
-    /// Return the interned copy of `text`, or null
+    /// Returns the interned copy of `text`, or null. Does not add text to the table.
     pub fn lookup(self: *const Strings, text: []const u8) ?*const String {
         return self.find(text, std.hash.Fnv1a_32.hash(text));
     }

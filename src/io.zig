@@ -60,14 +60,14 @@ const Buf = struct {
     }
 };
 
-/// Capture what every machine prints.
+/// Captures what every machine prints.
 pub fn beginCapture() void {
     capture_buf.len = 0;
     capture_from = null;
     capturing = true;
 }
 
-/// Captures what machine `m` prints.
+/// Captures only what machine `m` prints.
 pub fn beginCaptureFrom(m: Handle) void {
     beginCapture();
     capture_from = m;

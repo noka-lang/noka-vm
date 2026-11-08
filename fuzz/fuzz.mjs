@@ -19,6 +19,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
+import { crashReason } from '../tools/report.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const corpusDir = join(here, 'corpus');
@@ -112,10 +113,9 @@ function runNative(source) {
   const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
   if (r.signal) return { kind: 'crash', detail: `killed by ${r.signal}: ${firstLine(r.stderr)}` };
   if (r.status === 0) return { kind: 'clean', how: 'ok' };
-  // A failed program prints its crash report to stderr, and the report's first line is the reason.
-  const reason = r.status === 1 ? (r.stderr ?? '').split('\n')[0] : '';
+  const reason = r.status === 1 ? crashReason(r.stderr) : '';
   if (reason === 'compile') return { kind: 'clean', how: 'compile' };
-  if (/^(disc|frozen|math|oom|type|undefined)$/.test(reason)) return { kind: 'clean', how: 'runtime' };
+  if (reason !== '') return { kind: 'clean', how: 'runtime' };
   return { kind: 'crash', detail: `exit ${r.status}: ${firstLine(out)}` };
 }
 

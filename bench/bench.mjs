@@ -136,7 +136,7 @@ async function loadWasm(path) {
   const decoder = new TextDecoder();
   const imports = {
     env: {
-      host_print(ptr, len) {
+      noka_host_print(m, ptr, len) {
         output += decoder.decode(new Uint8Array(memory.buffer, ptr, len));
       },
     },
@@ -156,15 +156,16 @@ async function loadWasm(path) {
       new Uint8Array(memory.buffer, e.noka_memory(m) + DISC.offset, bytes.length).set(bytes);
       output = '';
       const status = e.noka_eval(m, bytes.length);
+      const report = status === 2 ? decoder.decode(new Uint8Array(memory.buffer, e.noka_report(m), e.noka_report_len(m))) : '';
       e.noka_machine_free(m);
-      return { status, output };
+      return { status, output, report };
     },
   };
 }
 
 function timeWasm(program) {
   const first = wasm.run(program.source);
-  if (first.status === 2) fail(`${program.name} (wasm) failed:\n${first.output}`);
+  if (first.status === 2) fail(`${program.name} (wasm) failed:\n${first.report}`);
   expectOutput(program, 'wasm', first.output);
 
   const samples = [];
