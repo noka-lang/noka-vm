@@ -45,6 +45,17 @@ pub const Heap = struct {
         return self.permanent - self.top;
     }
 
+    /// Allocates a GC object of `n` bytes, or returns null if it doesn't fit.
+    pub fn alloc(self: *Heap, kind: Kind, n: u32) ?Ref {
+        const total = std.mem.alignForward(u32, n, alignment);
+        if (total > self.free()) return null;
+
+        const ref = self.top;
+        self.top += total;
+        self.header(ref).* = .{ .size = total, .kind = kind };
+        return ref;
+    }
+
     /// Allocates a permanent object of `n` bytes, or returns null if it doesn't fit.
     pub fn allocPermanent(self: *Heap, kind: Kind, n: u32) ?Ref {
         const total = std.mem.alignForward(u32, n, alignment);
@@ -73,6 +84,29 @@ fn testHeap(bytes: *align(alignment) [size]u8) Heap {
     var heap: Heap = undefined;
     heap.init(bytes);
     return heap;
+}
+
+test "GC objects grow up from the bottom" {
+    var bytes: [size]u8 align(alignment) = undefined;
+    var heap = testHeap(&bytes);
+
+    const a = heap.alloc(.string, 12).?;
+    const b = heap.alloc(.string, 20).?;
+
+    try std.testing.expectEqual(0, a);
+    try std.testing.expectEqual(16, b);
+    try std.testing.expectEqual(size - 40, heap.free());
+}
+
+test "GC objects and permanent objects meet in the middle" {
+    var bytes: [size]u8 align(alignment) = undefined;
+    var heap = testHeap(&bytes);
+
+    try std.testing.expect(heap.allocPermanent(.string, size / 2) != null);
+    try std.testing.expect(heap.alloc(.string, size / 2) != null);
+    try std.testing.expectEqual(0, heap.free());
+    try std.testing.expectEqual(null, heap.alloc(.string, 8));
+    try std.testing.expectEqual(null, heap.allocPermanent(.string, 8));
 }
 
 test "permanent objects grow down from the top" {

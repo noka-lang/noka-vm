@@ -304,7 +304,7 @@ const VM = struct {
                 .equal => {
                     const b = self.pop();
                     const a = self.pop();
-                    self.push(.{ .boolean = a.equals(b) });
+                    self.push(.{ .boolean = a.equals(b, &self.machine.heap) });
                 },
                 .greater, .less => {
                     const b = self.pop();
@@ -329,19 +329,15 @@ const VM = struct {
                         const a_bytes = strings.bytes(heap, a.string);
                         const b_bytes = strings.bytes(heap, b.string);
 
-                        const ref = strings.allocPermanent(heap, @intCast(a_bytes.len + b_bytes.len)) orelse {
-                            return self.runtimeError(.oom, "out of string memory", .{});
+                        const ref = strings.alloc(heap, @intCast(a_bytes.len + b_bytes.len)) orelse {
+                            return self.runtimeError(.oom, "out of memory", .{});
                         };
                         const out = strings.buffer(heap, ref);
                         @memcpy(out[0..a_bytes.len], a_bytes);
                         @memcpy(out[a_bytes.len..], b_bytes);
                         strings.seal(heap, ref);
 
-                        const joined = strings.adopt(heap, ref) orelse {
-                            return self.runtimeError(.oom, "out of string memory", .{});
-                        };
-
-                        self.push(.{ .string = joined });
+                        self.push(.{ .string = ref });
                         continue;
                     }
 
@@ -747,6 +743,7 @@ test "string concatenation" {
     try expectOutput("\"a\" + \"b\" + \"c\"", "abc");
     try expectFailure("\"score: \" + 10", .type, "'add' expected two numbers or strings, got string and number");
     try expectFailure("\"a\" - \"b\"", .type, "'subtract' expected two numbers, got string and string");
+    try expectFailure("s : \"ab\"\nwhile true\n  s = s + s\nend", .oom, "out of memory");
 }
 
 test "string equality" {
@@ -754,6 +751,9 @@ test "string equality" {
     try expectOutput("\"a\" == \"b\"", "false");
     try expectOutput("\"a\" != \"b\"", "true");
     try expectOutput("\"ab\" == \"a\" + \"b\"", "true");
+    try expectOutput("\"a\" + \"b\" == \"a\" + \"b\"", "true");
+    try expectOutput("\"a\" + \"b\" == \"a\" + \"c\"", "false");
+    try expectOutput("\"a\" + \"b\" == \"a\" + \"bc\"", "false");
     try expectOutput("\"a\" == 1", "false");
     try expectOutput("\"\" == nil", "false");
 }

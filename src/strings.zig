@@ -2,6 +2,7 @@
 //!
 //! Interned strings live in the permanent region of HEAP
 //! The index itself lives in the machine header.
+//! Strings created at runtime are GC objects and are never interned.
 
 const std = @import("std");
 const heap_mod = @import("heap.zig");
@@ -26,6 +27,13 @@ pub fn hash(heap: *const Heap, ref: Ref) u32 {
     return heap.object(Object, ref).hash;
 }
 
+/// Allocates a GC string of `len` bytes.
+pub fn alloc(heap: *Heap, len: u32) ?Ref {
+    const ref = heap.alloc(.string, @sizeOf(Object) + len) orelse return null;
+    heap.object(Object, ref).len = len;
+    return ref;
+}
+
 /// Allocates a permenent string of `len` bytes.
 pub fn allocPermanent(heap: *Heap, len: u32) ?Ref {
     const ref = heap.allocPermanent(.string, @sizeOf(Object) + len) orelse return null;
@@ -42,6 +50,15 @@ pub fn buffer(heap: *const Heap, ref: Ref) []u8 {
 /// Stores the hash of the string at `ref`.
 pub fn seal(heap: *Heap, ref: Ref) void {
     heap.object(Object, ref).hash = std.hash.Fnv1a_32.hash(bytes(heap, ref));
+}
+
+/// Returns whether the sealed strings at `a` and `b` have the same text.
+pub fn equal(heap: *const Heap, a: Ref, b: Ref) bool {
+    if (a == b) return true;
+
+    const x = heap.object(Object, a);
+    const y = heap.object(Object, b);
+    return x.len == y.len and x.hash == y.hash and std.mem.eql(u8, bytes(heap, a), bytes(heap, b));
 }
 
 /// Returns the interned copy of `text`, or null if the heap or the index is full.
@@ -138,6 +155,24 @@ test "adopting a string that is already interned frees it" {
 
     try std.testing.expectEqual(a, adopt(&heap, b).?);
     try std.testing.expectEqual(free, heap.free());
+}
+
+fn testString(heap: *Heap, text: []const u8) Ref {
+    const ref = alloc(heap, @intCast(text.len)).?;
+    @memcpy(buffer(heap, ref), text);
+    seal(heap, ref);
+    return ref;
+}
+
+test "strings with the same text are equal" {
+    var region: [heap_mod.size]u8 align(8) = undefined;
+    var heap = testHeap(&region);
+    const a = intern(&heap, "ab").?;
+
+    try std.testing.expect(equal(&heap, a, a));
+    try std.testing.expect(equal(&heap, a, testString(&heap, "ab")));
+    try std.testing.expect(!equal(&heap, a, testString(&heap, "ac")));
+    try std.testing.expect(!equal(&heap, a, testString(&heap, "abc")));
 }
 
 test "the string index fills at its load limit" {

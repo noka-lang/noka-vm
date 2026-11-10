@@ -82,7 +82,7 @@ pub const Chunk = struct {
         // NOTE: this loop is definitely not efficient but should be fine for now.
         // If it starts to get out of hand replace it with a hash map.
         for (self.constants[0..self.const_count], 0..) |existing, i| {
-            if (existing.equals(value)) return @intCast(i);
+            if (std.meta.eql(existing, value)) return @intCast(i);
         }
 
         if (self.const_count >= const_max) {
