@@ -1,12 +1,13 @@
 const std = @import("std");
 const io = @import("io.zig");
-const String = @import("strings.zig").String;
+const heap_mod = @import("heap.zig");
+const strings = @import("strings.zig");
 
 pub const Value = union(enum) {
     boolean: bool,
     nil,
     number: f64,
-    string: *const String,
+    string: heap_mod.Ref,
     // TODO: array, object, function, error
 
     pub fn typeName(self: Value) []const u8 {
@@ -31,12 +32,12 @@ pub const Value = union(enum) {
         };
     }
 
-    pub fn print(self: Value, m: io.Handle) void {
+    pub fn print(self: Value, m: io.Handle, heap: *const heap_mod.Heap) void {
         switch (self) {
             .boolean => |b| io.printf(m, "{}", .{b}),
             .nil => io.print(m, "nil"),
             .number => |n| io.printf(m, "{d}", .{n}),
-            .string => |s| io.print(m, s.bytes),
+            .string => |s| io.print(m, strings.bytes(heap, s)),
             // TODO: array, object, function, error
         }
     }

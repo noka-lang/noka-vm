@@ -5,8 +5,6 @@
 
 const std = @import("std");
 const Value = @import("value.zig").Value;
-const strings = @import("strings.zig");
-const globals_mod = @import("globals.zig");
 
 pub const Region = struct {
     offset: usize,
@@ -42,17 +40,6 @@ pub const const_slots = constants.size / @sizeOf(Value); // 4096
 pub const stack_slots = stack.size / @sizeOf(Value); // 4096
 pub const globals_slots = globals.size / @sizeOf(Value); // 1024
 
-/// The tables at the start of HEAP.
-pub const Heap = struct {
-    strings: strings.Strings = .{},
-    names: globals_mod.Names = .{},
-
-    pub fn reset(self: *Heap) void {
-        self.strings.reset();
-        self.names.reset();
-    }
-};
-
 comptime {
     const all = [_]Region{ disc, code, constants, vram, sprites, map, sfx, palette_io, stack, frames, globals, heap, font, reserved };
 
@@ -62,6 +49,5 @@ comptime {
         at = r.end();
     }
     if (at != size) @compileError(std.fmt.comptimePrint("regions end at 0x{X}, not 0x{X}", .{ at, size }));
-    if (@sizeOf(Heap) > heap.size) @compileError("the string and name tables don't fit in HEAP");
     if (@sizeOf(Value) != 16) @compileError(std.fmt.comptimePrint("Value is {d} B, the memory map assumes 16", .{@sizeOf(Value)}));
 }

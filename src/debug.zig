@@ -3,19 +3,20 @@ const value_mod = @import("value.zig");
 const chunk_mod = @import("chunk.zig");
 const Chunk = chunk_mod.Chunk;
 const OpCode = chunk_mod.OpCode;
+const Heap = @import("heap.zig").Heap;
 
 /// Print a whole chunk's bytecode.
-pub fn disassembleChunk(m: io.Handle, chunk: *const Chunk, name: []const u8) void {
+pub fn disassembleChunk(m: io.Handle, heap: *const Heap, chunk: *const Chunk, name: []const u8) void {
     io.printf(m, "== begin {s} ==\n", .{name});
     var offset: usize = 0;
     while (offset < chunk.code_count) {
-        offset = disassembleInstruction(m, chunk, offset);
+        offset = disassembleInstruction(m, heap, chunk, offset);
     }
     io.printf(m, "== end {s} ==\n\n", .{name});
 }
 
 /// Disassemble one instruction at `offset`, and return the offset of the next.
-pub fn disassembleInstruction(m: io.Handle, chunk: *const Chunk, offset: usize) usize {
+pub fn disassembleInstruction(m: io.Handle, heap: *const Heap, chunk: *const Chunk, offset: usize) usize {
     io.printf(m, "{d:0>4} ", .{offset});
     // TODO: put back line numbers
 
@@ -27,7 +28,7 @@ pub fn disassembleInstruction(m: io.Handle, chunk: *const Chunk, offset: usize) 
         .bor => simpleInstruction(m, "OP_BOR", offset),
         .bxor => simpleInstruction(m, "OP_BXOR", offset),
         .collapse => byteInstruction(m, "OP_COLLAPSE", chunk, offset),
-        .constant => constantInstruction(m, "OP_CONSTANT", chunk, offset),
+        .constant => constantInstruction(m, heap, "OP_CONSTANT", chunk, offset),
         .define_const => shortInstruction(m, "OP_DEFINE_CONST", chunk, offset),
         .define_global => shortInstruction(m, "OP_DEFINE_GLOBAL", chunk, offset),
         .divide => simpleInstruction(m, "OP_DIVIDE", offset),
@@ -87,10 +88,10 @@ fn simpleInstruction(m: io.Handle, name: []const u8, offset: usize) usize {
     return offset + 1;
 }
 
-fn constantInstruction(m: io.Handle, name: []const u8, chunk: *const Chunk, offset: usize) usize {
+fn constantInstruction(m: io.Handle, heap: *const Heap, name: []const u8, chunk: *const Chunk, offset: usize) usize {
     const index = readShort(chunk, offset);
     io.printf(m, "{s} {d} '", .{ name, index });
-    chunk.constants[index].print(m);
+    chunk.constants[index].print(m, heap);
     io.print(m, "'\n");
     return offset + 3;
 }

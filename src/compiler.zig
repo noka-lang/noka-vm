@@ -7,7 +7,8 @@ const chunk_mod = @import("chunk.zig");
 const Chunk = chunk_mod.Chunk;
 const OpCode = chunk_mod.OpCode;
 const Value = @import("value.zig").Value;
-const memory = @import("memory.zig");
+const Heap = @import("heap.zig").Heap;
+const strings = @import("strings.zig");
 const builtins = @import("builtins.zig");
 const globals = @import("globals.zig");
 const Report = @import("report.zig").Report;
@@ -41,7 +42,8 @@ const Mutability = globals.Mutability;
 pub const Compiler = struct {
     scanner: Scanner,
     chunk: *Chunk,
-    heap: *memory.Heap,
+    heap: *Heap,
+    names: *globals.Names,
     report: *Report,
     current: Token = undefined,
     previous: Token = undefined,
@@ -82,8 +84,8 @@ pub const Compiler = struct {
     const case_pattern_max = 16;
 
     /// Compile `source` into `chunk`. Returns false if there were errors.
-    pub fn compile(source: []const u8, chunk: *Chunk, heap: *memory.Heap, report: *Report) bool {
-        var parser = Compiler{ .scanner = Scanner.init(source), .chunk = chunk, .heap = heap, .report = report };
+    pub fn compile(source: []const u8, chunk: *Chunk, heap: *Heap, names: *globals.Names, report: *Report) bool {
+        var parser = Compiler{ .scanner = Scanner.init(source), .chunk = chunk, .heap = heap, .names = names, .report = report };
         parser.advance();
 
         parser.block(.eof);
@@ -265,12 +267,12 @@ pub const Compiler = struct {
     }
 
     fn globalSlot(self: *Compiler, name: Token) ?u16 {
-        const interned = self.heap.strings.intern(name.lexeme) orelse {
+        const interned = strings.intern(self.heap, name.lexeme) orelse {
             self.errorAt(name, "out of string memory");
             return null;
         };
 
-        return self.heap.names.slot(interned) orelse {
+        return self.names.slot(interned) orelse {
             self.errorAt(name, "too many globals");
             return null;
         };
@@ -643,37 +645,59 @@ pub const Compiler = struct {
     fn string(self: *Compiler) void {
         const body = self.previous.lexeme[1 .. self.previous.lexeme.len - 1];
 
-        var builder = self.heap.strings.build();
+        // First pass: check the escapes and count the bytes they represent.
+        var len: u32 = 0;
         var i: usize = 0;
         while (i < body.len) : (i += 1) {
-            if (body[i] != '\\') {
-                builder.push(body[i]);
-                continue;
-            }
-
-            // scanner cannot end on a literal backslash
-            i += 1;
-            builder.push(switch (body[i]) {
-                'n' => '\n',
-                't' => '\t',
-                '\\' => '\\',
-                '"' => '"',
-                '\'' => '\'',
-                // TODO: '{' and '}'
-                else => {
-                    builder.discard();
+            if (body[i] == '\\') {
+                i += 1;
+                if (escape(body[i]) == null) {
                     self.errorAtPreviousFmt("unknown escape '\\{c}'", .{body[i]});
                     return;
-                },
-            });
+                }
+            }
+            len += 1;
         }
 
-        const s = builder.finish() orelse {
+        const ref = strings.allocPermanent(self.heap, len) orelse {
+            self.errorAtPrevious("out of string memory");
+            return;
+        };
+
+        // Second pass: write the bytes.
+        const out = strings.buffer(self.heap, ref);
+        var at: usize = 0;
+        i = 0;
+        while (i < body.len) : (i += 1) {
+            if (body[i] == '\\') {
+                i += 1;
+                out[at] = escape(body[i]).?;
+            } else {
+                out[at] = body[i];
+            }
+            at += 1;
+        }
+        strings.seal(self.heap, ref);
+
+        const s = strings.adopt(self.heap, ref) orelse {
             self.errorAtPrevious("out of string memory");
             return;
         };
 
         self.emitConstant(.{ .string = s });
+    }
+
+    /// Returns the byte that `\c` stands for, or null for an unknown escape.
+    fn escape(c: u8) ?u8 {
+        return switch (c) {
+            'n' => '\n',
+            't' => '\t',
+            '\\' => '\\',
+            '"' => '"',
+            '\'' => '\'',
+            // TODO: '{' and '}'
+            else => null,
+        };
     }
 
     fn this(self: *Compiler) void {

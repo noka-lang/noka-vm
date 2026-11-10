@@ -9,6 +9,8 @@ const disc_mod = @import("disc.zig");
 const memory = @import("memory.zig");
 const builtins = @import("builtins.zig");
 const globals = @import("globals.zig");
+const Heap = @import("heap.zig").Heap;
+const strings = @import("strings.zig");
 const report_mod = @import("report.zig");
 const Reason = report_mod.Reason;
 
@@ -35,7 +37,8 @@ const Machine = struct {
     // Do not give fields defaults, or `m.* = .{}` will copy the 512 KiB block on every create.
     block: [memory.size]u8 align(16) = undefined,
     chunk: Chunk = undefined,
-    heap: *memory.Heap = undefined,
+    heap: Heap = undefined,
+    names: globals.Names = undefined,
     globals: *[memory.globals_slots]Value = undefined,
     failed: bool = undefined,
     report: Report = undefined,
@@ -44,8 +47,8 @@ const Machine = struct {
         const m = std.heap.page_allocator.create(Machine) catch return null;
         m.* = .{};
         m.globals = m.slots(memory.globals, Value);
-        m.heap = &m.slots(memory.heap, memory.Heap)[0];
-        m.heap.* = .{};
+        m.heap.init(m.region(memory.heap));
+        m.names.reset();
         m.failed = false;
         m.report.len = 0;
 
@@ -68,6 +71,7 @@ const Machine = struct {
 
     fn reset(self: *Machine) void {
         self.heap.reset();
+        self.names.reset();
         self.failed = false;
         self.report.len = 0;
     }
@@ -107,8 +111,8 @@ const Machine = struct {
     fn compileAndRun(self: *Machine, source: []const u8) Status {
         self.chunk = .{ .code = self.region(memory.code), .constants = self.slots(memory.constants, Value) };
 
-        if (!Compiler.compile(source, &self.chunk, self.heap, &self.report)) return self.fail();
-        if (debug_print_bytecode) debug.disassembleChunk(self, &self.chunk, "compiled code");
+        if (!Compiler.compile(source, &self.chunk, &self.heap, &self.names, &self.report)) return self.fail();
+        if (debug_print_bytecode) debug.disassembleChunk(self, &self.heap, &self.chunk, "compiled code");
 
         var vm = VM{ .machine = self, .chunk = &self.chunk, .stack = self.slots(memory.stack, Value) };
 
@@ -148,8 +152,8 @@ const Machine = struct {
     /// Returns the GLOBALS slot of `function`, or null if the program hasn't declared it.
     /// Built-ins are not checked.
     fn declaredSlot(self: *Machine, function: LifecycleFn) ?u16 {
-        const name = self.heap.strings.lookup(@tagName(function)) orelse return null;
-        return self.heap.names.findDeclared(name);
+        const name = strings.lookup(&self.heap, @tagName(function)) orelse return null;
+        return self.names.findDeclared(name);
     }
 };
 
@@ -285,7 +289,7 @@ const VM = struct {
     fn run(self: *VM) bool {
         while (true) {
             if (debug_trace_execution) {
-                _ = debug.disassembleInstruction(self.machine, self.chunk, self.ip);
+                _ = debug.disassembleInstruction(self.machine, &self.machine.heap, self.chunk, self.ip);
             }
 
             const op: OpCode = @enumFromInt(self.readByte());
@@ -321,11 +325,19 @@ const VM = struct {
                     const a = self.pop();
 
                     if (a == .string and b == .string) {
-                        var builder = self.machine.heap.strings.build();
-                        builder.pushSlice(a.string.bytes);
-                        builder.pushSlice(b.string.bytes);
+                        const heap = &self.machine.heap;
+                        const a_bytes = strings.bytes(heap, a.string);
+                        const b_bytes = strings.bytes(heap, b.string);
 
-                        const joined = builder.finish() orelse {
+                        const ref = strings.allocPermanent(heap, @intCast(a_bytes.len + b_bytes.len)) orelse {
+                            return self.runtimeError(.oom, "out of string memory", .{});
+                        };
+                        const out = strings.buffer(heap, ref);
+                        @memcpy(out[0..a_bytes.len], a_bytes);
+                        @memcpy(out[a_bytes.len..], b_bytes);
+                        strings.seal(heap, ref);
+
+                        const joined = strings.adopt(heap, ref) orelse {
                             return self.runtimeError(.oom, "out of string memory", .{});
                         };
 
@@ -414,7 +426,8 @@ const VM = struct {
                         return self.runtimeError(.type, "'in' expected two strings, got {s} and {s}", .{ needle.typeName(), haystack.typeName() });
                     }
 
-                    self.push(.{ .boolean = std.mem.indexOf(u8, haystack.string.bytes, needle.string.bytes) != null });
+                    const heap = &self.machine.heap;
+                    self.push(.{ .boolean = std.mem.indexOf(u8, strings.bytes(heap, haystack.string), strings.bytes(heap, needle.string)) != null });
                 },
                 .bnot => {
                     const v = self.pop();
@@ -427,7 +440,7 @@ const VM = struct {
                     self.push(.{ .number = @floatFromInt(~vi) });
                 },
                 .print => {
-                    self.pop().print(self.machine);
+                    self.pop().print(self.machine, &self.machine.heap);
                     io.print(self.machine, "\n");
                 },
                 .jump => {
@@ -464,9 +477,9 @@ const VM = struct {
                         else => unreachable,
                     };
 
-                    self.machine.heap.names.declare(slot, mutability) catch {
-                        const name = self.machine.heap.names.pool[slot].name;
-                        return self.runtimeError(.undefined, "'{s}' has already been declared", .{name.bytes});
+                    self.machine.names.declare(slot, mutability) catch {
+                        const name = self.machine.names.pool[slot].name;
+                        return self.runtimeError(.undefined, "'{s}' has already been declared", .{strings.bytes(&self.machine.heap, name)});
                     };
                     self.machine.globals[slot] = self.pop();
                 },
@@ -481,7 +494,7 @@ const VM = struct {
                     const global = self.declaredGlobal(slot) orelse return false;
 
                     if (global.mutability == .constant) {
-                        return self.runtimeError(.frozen, "'{s}' is constant and cannot be reassigned", .{global.name.bytes});
+                        return self.runtimeError(.frozen, "'{s}' is constant and cannot be reassigned", .{strings.bytes(&self.machine.heap, global.name)});
                     }
 
                     self.machine.globals[slot] = self.peek(0);
@@ -509,7 +522,7 @@ const VM = struct {
                     // TODO: real `return` belongs to function calls; a top-level program should
                     // print via an explicit print statement/op instead of leaning on OP_RETURN.
                     if (self.sp > 0) {
-                        self.pop().print(self.machine);
+                        self.pop().print(self.machine, &self.machine.heap);
                         io.print(self.machine, "\n");
                     }
                     return true;
@@ -521,9 +534,9 @@ const VM = struct {
 
     /// Returns the global in `slot`, or null.
     inline fn declaredGlobal(self: *VM, slot: u16) ?*globals.Global {
-        const global = &self.machine.heap.names.pool[slot];
+        const global = &self.machine.names.pool[slot];
         if (!global.declared) {
-            _ = self.runtimeError(.undefined, "undefined variable '{s}'", .{global.name.bytes});
+            _ = self.runtimeError(.undefined, "undefined variable '{s}'", .{strings.bytes(&self.machine.heap, global.name)});
             return null;
         }
 
