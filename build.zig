@@ -5,11 +5,16 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const options = b.addOptions();
+    options.addOption(bool, "gc_stress", b.option(bool, "gc-stress", "Collect garbage at every point that can collect") orelse false);
+
     const vm = b.addModule("noka_vm", .{
         .root_source_file = b.path("src/vm.zig"),
         .target = target,
         .optimize = optimize,
     });
+
+    vm.addOptions("build_options", options);
 
     // ---- NOT A SHIPPED ARTIFACT ----------------------------------------------------------------
     // It exists so `zig build run -- '1 + 2'` can drive the VM from a terminal
@@ -54,6 +59,7 @@ pub fn build(b: *std.Build) void {
             .optimize = .ReleaseSmall,
         }),
     });
+    wasm.root_module.addOptions("build_options", options);
     wasm.entry = .disabled;
     wasm.rdynamic = true;
 
@@ -82,20 +88,20 @@ pub fn build(b: *std.Build) void {
     // ---- zig build bench -----------------------------------------------------------------------
     // Times bench/programs natively (ReleaseFast) and as the shipped vm.wasm (in Node), then
     // compares against bench/baseline.json. Pass `-- --update` to rewrite the baseline.
+    const bench_vm = b.createModule(.{
+        .root_source_file = b.path("src/vm.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
+    bench_vm.addOptions("build_options", options);
+
     const bench_runner = b.addExecutable(.{
         .name = "bench-runner",
         .root_module = b.createModule(.{
             .root_source_file = b.path("bench/runner.zig"),
             .target = target,
             .optimize = .ReleaseFast,
-            .imports = &.{.{
-                .name = "noka_vm",
-                .module = b.createModule(.{
-                    .root_source_file = b.path("src/vm.zig"),
-                    .target = target,
-                    .optimize = .ReleaseFast,
-                }),
-            }},
+            .imports = &.{.{ .name = "noka_vm", .module = bench_vm }},
         }),
     });
 

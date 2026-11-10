@@ -31,6 +31,8 @@ pub const Heap = struct {
     permanent: u32,
     /// Interned strings in the permanent region.
     interned: strings.Index,
+    /// `top` location after the last collection.
+    live: u32,
 
     pub fn init(self: *Heap, bytes: *[size]u8) void {
         self.bytes = bytes;
@@ -39,6 +41,7 @@ pub const Heap = struct {
 
     pub fn reset(self: *Heap) void {
         self.top = 0;
+        self.live = 0;
         self.permanent = size;
         self.interned.reset();
     }
@@ -114,6 +117,13 @@ pub const Heap = struct {
 
         @memset(self.bytes[to..self.top], undefined);
         self.top = to;
+        self.live = to;
+    }
+
+    ///Returns whether the GC objects made since the last collection take up more than `num`/`den`
+    /// of the space that collection left free.
+    pub fn filled(self: *const Heap, num: u32, den: u32) bool {
+        return (self.top - self.live) * den > (self.permanent - self.live) * num;
     }
 
     fn gcRef(self: *const Heap, value: *Value) ?*Ref {
@@ -185,6 +195,30 @@ test "a collection leaves permanent objects alone" {
 
     try std.testing.expectEqual(p, roots[0].string);
     try std.testing.expectEqual(size - 16, heap.free());
+}
+
+test "an empty heap is half filled past half of its space" {
+    var bytes: [size]u8 align(alignment) = undefined;
+    var heap = testHeap(&bytes);
+
+    _ = heap.alloc(.string, size / 2).?;
+    try std.testing.expect(!heap.filled(1, 2));
+
+    _ = heap.alloc(.string, 8).?;
+    try std.testing.expect(heap.filled(1, 2));
+}
+
+test "filled counts only the objects made since the last collection" {
+    var bytes: [size]u8 align(alignment) = undefined;
+    var heap = testHeap(&bytes);
+    var roots = [_]Value{.{ .string = heap.alloc(.string, size / 2).? }};
+    heap.collect(&.{&roots});
+
+    _ = heap.alloc(.string, size / 4).?;
+    try std.testing.expect(!heap.filled(1, 2));
+
+    _ = heap.alloc(.string, 8).?;
+    try std.testing.expect(heap.filled(1, 2));
 }
 
 test "permanent objects grow down from the top" {

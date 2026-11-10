@@ -14,6 +14,7 @@ const Ref = @import("heap.zig").Ref;
 const strings = @import("strings.zig");
 const report_mod = @import("report.zig");
 const Reason = report_mod.Reason;
+const gc_stress = @import("build_options").gc_stress;
 
 const debug_print_bytecode = false;
 const debug_trace_execution = false;
@@ -126,11 +127,17 @@ const Machine = struct {
         return self.lifecycleStatus();
     }
 
+    /// Colelcts garbage. The roots are `stack` and the globals.
+    fn collect(self: *Machine, stack: []Value) void {
+        self.heap.collect(&.{ stack, self.globals[0..self.names.pool_count] });
+    }
+
     /// Calls the program's `tick` or `draw` function for one frame.
     fn frame(self: *Machine, comptime function: LifecycleFn) Status {
         if (self.failed) return .failed;
         if (!self.callIfDeclared(function)) return self.fail();
-        // TODO: collect garbage after `draw`
+        // The stack is empty between frames.
+        if (function == .draw and (gc_stress or self.heap.filled(1, 2))) self.collect(&.{});
 
         return self.lifecycleStatus();
     }
@@ -513,6 +520,7 @@ const VM = struct {
                 .loop => {
                     const offset = self.readShort();
                     self.ip -= offset;
+                    if (gc_stress or self.machine.heap.filled(3, 4)) self.collectGarbage();
                 },
                 .collapse => {
                     const n = self.readByte();
@@ -537,6 +545,7 @@ const VM = struct {
     /// Allocates a string of `len` bytes, collecting garbage first if the heap is full.
     fn allocString(self: *VM, len: u32) ?Ref {
         const heap = &self.machine.heap;
+        if (gc_stress) self.collectGarbage();
         return strings.alloc(heap, len) orelse {
             self.collectGarbage();
             return strings.alloc(heap, len);
@@ -544,8 +553,7 @@ const VM = struct {
     }
 
     fn collectGarbage(self: *VM) void {
-        const m = self.machine;
-        m.heap.collect(&.{ self.stack[0..self.sp], m.globals[0..m.names.pool_count] });
+        self.machine.collect(self.stack[0..self.sp]);
     }
 
     /// Returns the global in `slot`, or null.
@@ -787,6 +795,66 @@ test "strings in globals, locals and operands survive a collection" {
         \\  kept + local + last
         \\end
     , "abcdefgh");
+}
+
+test "noka_draw collects garbage once it fills half the heap" {
+    // Stress mode collects after every draw.
+    if (gc_stress) return error.SkipZigTest;
+
+    const m = noka_machine_new().?;
+    defer noka_machine_free(m);
+    io.beginCapture();
+    defer io.endCapture();
+
+    // Each line doubles `s`, and the strings it replaces become garbage.
+    // Every string becomes garbage once `s` is nil.
+    try testing.expectEqual(Status.finished, evalIn(m,
+        \\s : "ab"
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = nil
+    ));
+    const free = m.heap.free();
+    try testing.expect(m.heap.filled(1, 2));
+    _ = noka_draw(m);
+    try testing.expect(m.heap.free() > free);
+}
+
+test "noka_draw leaves the heap alone when it is less than half filled" {
+    // Stress mode collects after every draw.
+    if (gc_stress) return error.SkipZigTest;
+
+    const m = noka_machine_new().?;
+    defer noka_machine_free(m);
+    io.beginCapture();
+    defer io.endCapture();
+
+    try testing.expectEqual(Status.finished, evalIn(m, "junk : \"a\" + \"b\"\njunk = nil"));
+    const free = m.heap.free();
+    _ = noka_draw(m);
+    try testing.expectEqual(free, m.heap.free());
+}
+
+test "a loop collects garbage before the heap fills" {
+    const m = noka_machine_new().?;
+    defer noka_machine_free(m);
+    io.beginCapture();
+    defer io.endCapture();
+
+    try testing.expectEqual(Status.finished, evalIn(m, "i : 0\nwhile i < 10000\n  s : \"ab\" + \"cd\"\n  i = i + 1\nend"));
+    try testing.expect(!m.heap.filled(3, 4));
 }
 
 test "string equality" {
