@@ -6,6 +6,7 @@
 const std = @import("std");
 const memory = @import("memory.zig");
 const strings = @import("strings.zig");
+const Value = @import("value.zig").Value;
 
 pub const size: u32 = memory.heap.size;
 
@@ -18,7 +19,9 @@ pub const Kind = enum(u8) { string };
 
 pub const Header = extern struct {
     size: u32,
+    forward: Ref = 0,
     kind: Kind,
+    marked: bool = false,
 };
 
 pub const Heap = struct {
@@ -71,6 +74,53 @@ pub const Heap = struct {
         self.permanent += self.header(ref).size;
     }
 
+    /// Frees every GC object that `roots` can't reach, slides the rest down to the bottom.
+    /// Rewrites the refs in `roots` to point at the objects' new locations.
+    pub fn collect(self: *Heap, roots: []const []Value) void {
+        for (roots) |values| {
+            for (values) |*value| {
+                const ref = self.gcRef(value) orelse continue;
+                self.header(ref.*).marked = true;
+            }
+        }
+
+        var to: u32 = 0;
+        var at: u32 = 0;
+        while (at < self.top) : (at += self.header(at).size) {
+            const h = self.header(at);
+            if (!h.marked) continue;
+
+            h.forward = to;
+            to += h.size;
+        }
+
+        for (roots) |values| {
+            for (values) |*value| {
+                const ref = self.gcRef(value) orelse continue;
+                ref.* = self.header(ref.*).forward;
+            }
+        }
+
+        at = 0;
+        while (at < self.top) {
+            const h = self.header(at);
+            const n = h.size;
+            if (h.marked) {
+                h.marked = false;
+                std.mem.copyForwards(u8, self.bytes[h.forward..][0..n], self.bytes[at..][0..n]);
+            }
+            at += n;
+        }
+
+        @memset(self.bytes[to..self.top], undefined);
+        self.top = to;
+    }
+
+    fn gcRef(self: *const Heap, value: *Value) ?*Ref {
+        const ref = value.ref() orelse return null;
+        return if (ref.* < self.top) ref else null;
+    }
+
     pub fn header(self: *const Heap, ref: Ref) *Header {
         return self.object(Header, ref);
     }
@@ -107,6 +157,34 @@ test "GC objects and permanent objects meet in the middle" {
     try std.testing.expectEqual(0, heap.free());
     try std.testing.expectEqual(null, heap.alloc(.string, 8));
     try std.testing.expectEqual(null, heap.allocPermanent(.string, 8));
+}
+
+test "a collection frees the objects the roots can't reach" {
+    var bytes: [size]u8 align(alignment) = undefined;
+    var heap = testHeap(&bytes);
+    _ = heap.alloc(.string, 16).?;
+    const b = heap.alloc(.string, 16).?;
+    _ = heap.alloc(.string, 16).?;
+    var roots = [_]Value{ .{ .string = b }, .{ .string = b }, .{ .number = 1 } };
+
+    heap.collect(&.{&roots});
+
+    try std.testing.expectEqual(size - 16, heap.free());
+    try std.testing.expectEqual(0, roots[0].string);
+    try std.testing.expectEqual(0, roots[1].string);
+}
+
+test "a collection leaves permanent objects alone" {
+    var bytes: [size]u8 align(alignment) = undefined;
+    var heap = testHeap(&bytes);
+    const p = heap.allocPermanent(.string, 16).?;
+    _ = heap.alloc(.string, 16).?;
+    var roots = [_]Value{.{ .string = p }};
+
+    heap.collect(&.{&roots});
+
+    try std.testing.expectEqual(p, roots[0].string);
+    try std.testing.expectEqual(size - 16, heap.free());
 }
 
 test "permanent objects grow down from the top" {

@@ -10,6 +10,7 @@ const memory = @import("memory.zig");
 const builtins = @import("builtins.zig");
 const globals = @import("globals.zig");
 const Heap = @import("heap.zig").Heap;
+const Ref = @import("heap.zig").Ref;
 const strings = @import("strings.zig");
 const report_mod = @import("report.zig");
 const Reason = report_mod.Reason;
@@ -47,6 +48,7 @@ const Machine = struct {
         const m = std.heap.page_allocator.create(Machine) catch return null;
         m.* = .{};
         m.globals = m.slots(memory.globals, Value);
+        @memset(m.globals, .nil);
         m.heap.init(m.region(memory.heap));
         m.names.reset();
         m.failed = false;
@@ -70,6 +72,8 @@ const Machine = struct {
     }
 
     fn reset(self: *Machine) void {
+        // The collector scans every global with a slot.
+        @memset(self.globals, .nil);
         self.heap.reset();
         self.names.reset();
         self.failed = false;
@@ -321,25 +325,27 @@ const VM = struct {
                     } });
                 },
                 .add => {
-                    const b = self.pop();
-                    const a = self.pop();
-
-                    if (a == .string and b == .string) {
+                    if (self.peek(1) == .string and self.peek(0) == .string) {
                         const heap = &self.machine.heap;
-                        const a_bytes = strings.bytes(heap, a.string);
-                        const b_bytes = strings.bytes(heap, b.string);
+                        const len = strings.bytes(heap, self.peek(1).string).len + strings.bytes(heap, self.peek(0).string).len;
 
-                        const ref = strings.alloc(heap, @intCast(a_bytes.len + b_bytes.len)) orelse {
+                        const ref = self.allocString(@intCast(len)) orelse {
                             return self.runtimeError(.oom, "out of memory", .{});
                         };
+                        const a_bytes = strings.bytes(heap, self.peek(1).string);
+                        const b_bytes = strings.bytes(heap, self.peek(0).string);
                         const out = strings.buffer(heap, ref);
                         @memcpy(out[0..a_bytes.len], a_bytes);
                         @memcpy(out[a_bytes.len..], b_bytes);
                         strings.seal(heap, ref);
 
+                        self.sp -= 2;
                         self.push(.{ .string = ref });
                         continue;
                     }
+
+                    const b = self.pop();
+                    const a = self.pop();
 
                     if (a != .number or b != .number) {
                         return self.runtimeError(.type, "'add' expected two numbers or strings, got {s} and {s}", .{ a.typeName(), b.typeName() });
@@ -526,6 +532,20 @@ const VM = struct {
                 _ => @panic("unknown opcode"),
             }
         }
+    }
+
+    /// Allocates a string of `len` bytes, collecting garbage first if the heap is full.
+    fn allocString(self: *VM, len: u32) ?Ref {
+        const heap = &self.machine.heap;
+        return strings.alloc(heap, len) orelse {
+            self.collectGarbage();
+            return strings.alloc(heap, len);
+        };
+    }
+
+    fn collectGarbage(self: *VM) void {
+        const m = self.machine;
+        m.heap.collect(&.{ self.stack[0..self.sp], m.globals[0..m.names.pool_count] });
     }
 
     /// Returns the global in `slot`, or null.
@@ -744,6 +764,29 @@ test "string concatenation" {
     try expectFailure("\"score: \" + 10", .type, "'add' expected two numbers or strings, got string and number");
     try expectFailure("\"a\" - \"b\"", .type, "'subtract' expected two numbers, got string and string");
     try expectFailure("s : \"ab\"\nwhile true\n  s = s + s\nend", .oom, "out of memory");
+}
+
+test "a program that makes more garbage than the heap holds keeps running" {
+    // `nope` gets a global slot but is never declared.
+    try expectOutput("while false\n  nope\nend\ni : 0\ns : \"\"\nwhile i < 10000\n  s = \"ab\" + \"cd\"\n  i = i + 1\nend\ns", "abcd");
+}
+
+test "strings in globals, locals and operands survive a collection" {
+    try expectOutput(
+        \\junk : "x" + "y"
+        \\junk = nil
+        \\kept : "a" + "b"
+        \\last : ""
+        \\do
+        \\  local : "c" + "d"
+        \\  i : 0
+        \\  while i < 10000
+        \\    last = ("e" + "f") + ("g" + "h")
+        \\    i = i + 1
+        \\  end
+        \\  kept + local + last
+        \\end
+    , "abcdefgh");
 }
 
 test "string equality" {

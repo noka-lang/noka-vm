@@ -175,6 +175,18 @@ test "strings with the same text are equal" {
     try std.testing.expect(!equal(&heap, a, testString(&heap, "abc")));
 }
 
+test "a collection keeps the text of the string it keeps" {
+    var region: [heap_mod.size]u8 align(8) = undefined;
+    var heap = testHeap(&region);
+    _ = testString(&heap, "dead");
+    var roots = [_]@import("value.zig").Value{.{ .string = testString(&heap, "kept") }};
+
+    heap.collect(&.{&roots});
+
+    try std.testing.expectEqual(0, roots[0].string);
+    try std.testing.expectEqualStrings("kept", bytes(&heap, roots[0].string));
+}
+
 test "the string index fills at its load limit" {
     var region: [heap_mod.size]u8 align(8) = undefined;
     var heap = testHeap(&region);

@@ -32,6 +32,14 @@ pub const Value = union(enum) {
         };
     }
 
+    /// Retrns the ref inside this value if it points into HEAP, otherwise null.
+    pub fn ref(self: *Value) ?*heap_mod.Ref {
+        return switch (self.*) {
+            .string => |*r| r,
+            else => null,
+        };
+    }
+
     pub fn print(self: Value, m: io.Handle, heap: *const heap_mod.Heap) void {
         switch (self) {
             .boolean => |b| io.printf(m, "{}", .{b}),
