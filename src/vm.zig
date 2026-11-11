@@ -116,7 +116,7 @@ const Machine = struct {
     fn compileAndRun(self: *Machine, source: []const u8) Status {
         self.chunk = .{ .code = self.region(memory.code), .constants = self.slots(memory.constants, Value) };
 
-        // The compiler can't collect, so free any garbage an earlier eval eft before it allocates
+        // The compiler can't collect, so free any garbage an earlier eval left before it allocates
         // permanent strings. The stack is empty between evals.
         if (self.heap.top > self.heap.live) self.collect(&.{});
 
