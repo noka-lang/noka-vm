@@ -1,6 +1,6 @@
 //! String objects in HEAP, and the index of interned strings.
 //!
-//! Interned strings live in the permanent region of HEAP
+//! Interned strings live in the permanent region of HEAP.
 //! The index itself lives in the machine header.
 //! Strings created at runtime are GC objects and are never interned.
 
@@ -34,14 +34,14 @@ pub fn alloc(heap: *Heap, len: u32) ?Ref {
     return ref;
 }
 
-/// Allocates a permenent string of `len` bytes.
+/// Allocates a permanent string of `len` bytes.
 pub fn allocPermanent(heap: *Heap, len: u32) ?Ref {
     const ref = heap.allocPermanent(.string, @sizeOf(Object) + len) orelse return null;
     heap.object(Object, ref).len = len;
     return ref;
 }
 
-/// Returns the bytes of the strings at `ref`.
+/// Returns the bytes of the string at `ref`.
 pub fn buffer(heap: *const Heap, ref: Ref) []u8 {
     const len = heap.object(Object, ref).len;
     return heap.bytes[ref + @sizeOf(Object) ..][0..len];
@@ -62,7 +62,7 @@ pub fn equal(heap: *const Heap, a: Ref, b: Ref) bool {
 }
 
 /// Returns the interned copy of `text`, or null if the heap or the index is full.
-/// The copy is added to the permenent region if it's new.
+/// The copy is added to the permanent region if it's new.
 pub fn intern(heap: *Heap, text: []const u8) ?Ref {
     if (lookup(heap, text)) |existing| return existing;
 
@@ -72,7 +72,8 @@ pub fn intern(heap: *Heap, text: []const u8) ?Ref {
     return heap.interned.insert(heap, ref);
 }
 
-/// Interns the sealed string at `ref`, or frees it and returns the existing copy if it is already interned.
+/// Interns the sealed string at `ref`, or frees it and returns the existing copy if it is
+/// already interned.
 pub fn adopt(heap: *Heap, ref: Ref) ?Ref {
     if (heap.interned.find(heap, bytes(heap, ref), hash(heap, ref))) |existing| {
         heap.releasePermanent(ref);

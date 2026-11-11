@@ -27,7 +27,7 @@ pub const Header = extern struct {
 pub const Heap = struct {
     bytes: *[size]u8,
     top: u32,
-    /// Permanent region starting point
+    /// The permanent region starting point.
     permanent: u32,
     /// Interned strings in the permanent region.
     interned: strings.Index,
@@ -46,7 +46,7 @@ pub const Heap = struct {
         self.interned.reset();
     }
 
-    // Returns the bytes left between the GC objects and the permanent region.
+    /// Returns the bytes left between the GC objects and the permanent region.
     pub fn free(self: *const Heap) u32 {
         return self.permanent - self.top;
     }
@@ -120,7 +120,7 @@ pub const Heap = struct {
         self.live = to;
     }
 
-    ///Returns whether the GC objects made since the last collection take up more than `num`/`den`
+    /// Returns whether the GC objects made since the last collection take up more than `num`/`den`
     /// of the space that collection left free.
     pub fn filled(self: *const Heap, num: u32, den: u32) bool {
         return (self.top - self.live) * den > (self.permanent - self.live) * num;

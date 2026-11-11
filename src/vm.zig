@@ -116,6 +116,10 @@ const Machine = struct {
     fn compileAndRun(self: *Machine, source: []const u8) Status {
         self.chunk = .{ .code = self.region(memory.code), .constants = self.slots(memory.constants, Value) };
 
+        // The compiler can't collect, so free any garbage an earlier eval eft before it allocates
+        // permanent strings. The stack is empty between evals.
+        if (self.heap.top > self.heap.live) self.collect(&.{});
+
         if (!Compiler.compile(source, &self.chunk, &self.heap, &self.names, &self.report)) return self.fail();
         if (debug_print_bytecode) debug.disassembleChunk(self, &self.heap, &self.chunk, "compiled code");
 
@@ -127,7 +131,7 @@ const Machine = struct {
         return self.lifecycleStatus();
     }
 
-    /// Colelcts garbage. The roots are `stack` and the globals.
+    /// Collects garbage. The roots are `stack` and the globals.
     fn collect(self: *Machine, stack: []Value) void {
         self.heap.collect(&.{ stack, self.globals[0..self.names.pool_count] });
     }
@@ -855,6 +859,41 @@ test "a loop collects garbage before the heap fills" {
 
     try testing.expectEqual(Status.finished, evalIn(m, "i : 0\nwhile i < 10000\n  s : \"ab\" + \"cd\"\n  i = i + 1\nend"));
     try testing.expect(!m.heap.filled(3, 4));
+}
+
+test "an eval collects the garbage an earlier eval left before it compiles" {
+    const m = noka_machine_new().?;
+    defer noka_machine_free(m);
+    io.beginCapture();
+    defer io.endCapture();
+
+    // Leaves about 96 KiB of garbage.
+    try testing.expectEqual(Status.finished, evalIn(m,
+        \\s : "ab"
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = s + s
+        \\s = nil
+    ));
+
+    // A 40 KiB string literal fits only once that garbage is removed.
+    var source: [40 * 1024]u8 = undefined;
+    @memset(&source, 'x');
+    source[0..5].* = "t : \"".*;
+    source[source.len - 1] = '"';
+    try testing.expectEqual(Status.finished, evalIn(m, &source));
 }
 
 test "string equality" {

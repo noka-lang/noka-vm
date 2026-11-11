@@ -32,7 +32,7 @@ pub const Value = union(enum) {
         };
     }
 
-    /// Retrns the ref inside this value if it points into HEAP, otherwise null.
+    /// Returns the ref inside this value if it points into HEAP, otherwise null.
     pub fn ref(self: *Value) ?*heap_mod.Ref {
         return switch (self.*) {
             .string => |*r| r,

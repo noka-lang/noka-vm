@@ -21,6 +21,36 @@
         "ns_per_iteration": 54.35
       }
     },
+    "churn": {
+      "iterations": 1000000,
+      "native": {
+        "min_ns": 78500500,
+        "median_ns": 78878917,
+        "ns_per_iteration": 78.5
+      },
+      "wasm": {
+        "min_ns": 116995500,
+        "median_ns": 118209959,
+        "ns_per_iteration": 117
+      },
+      "lua": {
+        "min_ns": 59598166,
+        "median_ns": 61323749,
+        "ns_per_iteration": 59.6
+      }
+    },
+    "collect": {
+      "iterations": null,
+      "native": {
+        "min_ns": 21208,
+        "median_ns": 21791
+      },
+      "wasm": {
+        "min_ns": 37208,
+        "median_ns": 37667
+      },
+      "lua": null
+    },
     "globals": {
       "iterations": 2000000,
       "native": {

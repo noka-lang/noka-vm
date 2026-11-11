@@ -10,6 +10,11 @@
 // An optional `// machines: N` header runs the program in N fresh machines per timed run, for
 // benchmarks of machine creation itself. Its Lua twin repeats its own work N times.
 //
+// A `// time: draw` header times one noka_draw call after an untimed eval, for the collection it
+// runs. These programs have no Lua twin and are only compared against the baseline. A single
+// call is short and noisy, so they take drawRuns samples instead of --runs. One that runs in under
+// half its baseline time also fails: the eval most likely collected, so noka_draw had nothing to do.
+//
 // Results go to bench/results.json (not committed). Each program and target is compared against
 // bench/baseline.json (committed) by its fastest run. More than 10% slower fails the step.
 //
@@ -33,6 +38,7 @@ const programsDir = join(here, 'programs');
 const baselinePath = join(here, 'baseline.json');
 const resultsPath = join(here, 'results.json');
 const threshold = 1.10;
+const drawRuns = 50;
 const luaDir = join(here, 'lua');
 const luaBar = { native: 3, wasm: 4 }; // max slowdown against Lua 5.4, per target
 const DISC = { offset: 0x00000, size: 0x10000 }; // from src/memory.zig, until layout.ts exists
@@ -58,9 +64,10 @@ for (const program of programs) {
   midLine = true;
   results.results[program.name] = {
     iterations: program.iterations,
+    time: program.time,
     native: timeNative(program),
     wasm: timeWasm(program),
-    lua: lua ? timeLua(program) : null,
+    lua: lua && program.time !== 'draw' ? timeLua(program) : null,
   };
   process.stderr.write(' done\n');
   midLine = false;
@@ -78,10 +85,11 @@ if (args.update) {
   }
 }
 
-const { regressions, overBar } = printTable(results, baseline);
+const { regressions, tooFast, overBar } = printTable(results, baseline);
 if (args.update) console.log(`\nbaseline written to ${baselinePath}`);
 const failures = [];
 if (regressions > 0) failures.push(`${regressions} benchmark(s) more than ${Math.round((threshold - 1) * 100)}% slower than the baseline`);
+if (tooFast > 0) failures.push(`${tooFast} draw benchmark(s) more than 2x faster than the baseline, so noka_draw likely did not collect`);
 if (overBar > 0) failures.push(`${overBar} benchmark(s) over the Lua bar (${luaBar.native}x native, ${luaBar.wasm}x wasm)`);
 if (failures.length > 0) fail(failures.join('; '));
 
@@ -109,6 +117,7 @@ function loadPrograms() {
         expect: header.expect,
         iterations: header.iterations ? Number(header.iterations) : null,
         machines: header.machines ? Number(header.machines) : 1,
+        time: header.time ?? 'eval',
       };
     });
 }
@@ -120,9 +129,11 @@ function timeNative(program) {
   if (check.status !== 0) fail(`${program.name} (native) failed:\n${check.stdout}${check.stderr}`);
   expectOutput(program, 'native', check.stdout);
 
-  const run = spawnSync(args.runner, ['time', String(args.runs), program.path, String(program.machines)], {
-    encoding: 'utf8',
-  });
+  const runArgs =
+    program.time === 'draw'
+      ? ['draw', String(drawRuns), program.path]
+      : ['time', String(args.runs), program.path, String(program.machines)];
+  const run = spawnSync(args.runner, runArgs, { encoding: 'utf8' });
   if (run.status !== 0) fail(`${program.name} (native) failed while timing:\n${run.stderr}`);
   const line = run.stderr.trim().split('\n').pop();
   return withPerIteration(JSON.parse(line), program);
@@ -145,20 +156,36 @@ async function loadWasm(path) {
   const e = instance.exports;
   memory = e.memory;
 
+  // A fresh machine per run, matching the native runner's interpretSource.
+  function evalIn(source) {
+    const bytes = new TextEncoder().encode(source);
+    const m = e.noka_machine_new();
+    if (!m) fail('vm.wasm is out of memory');
+    if (bytes.length > DISC.size) fail('program larger than the disc buffer');
+    // noka_machine_new can grow memory, which detaches older views, so take the view after it.
+    new Uint8Array(memory.buffer, e.noka_memory(m) + DISC.offset, bytes.length).set(bytes);
+    output = '';
+    const status = e.noka_eval(m, bytes.length);
+    const report = status === 2 ? decoder.decode(new Uint8Array(memory.buffer, e.noka_report(m), e.noka_report_len(m))) : '';
+    return { m, status, output, report };
+  }
+
   return {
     run(source) {
-      const bytes = new TextEncoder().encode(source);
-      // A fresh machine per run, matching the native runner's interpretSource.
-      const m = e.noka_machine_new();
-      if (!m) fail('vm.wasm is out of memory');
-      if (bytes.length > DISC.size) fail('program larger than the disc buffer');
-      // noka_machine_new can grow memory, which detaches older views, so take the view after it.
-      new Uint8Array(memory.buffer, e.noka_memory(m) + DISC.offset, bytes.length).set(bytes);
-      output = '';
-      const status = e.noka_eval(m, bytes.length);
-      const report = status === 2 ? decoder.decode(new Uint8Array(memory.buffer, e.noka_report(m), e.noka_report_len(m))) : '';
+      const { m, status, output: out, report } = evalIn(source);
       e.noka_machine_free(m);
-      return { status, output, report };
+      return { status, output: out, report };
+    },
+    // Evaluates `source` untimed, then returns how long one noka_draw call takes.
+    timeDraw(source) {
+      const { m, status, report } = evalIn(source);
+      if (status === 2) fail(`draw program failed:\n${report}`);
+      const start = process.hrtime.bigint();
+      const drawStatus = e.noka_draw(m);
+      const ns = Number(process.hrtime.bigint() - start);
+      e.noka_machine_free(m);
+      if (drawStatus === 2) fail('noka_draw failed');
+      return ns;
     },
   };
 }
@@ -169,13 +196,18 @@ function timeWasm(program) {
   expectOutput(program, 'wasm', first.output);
 
   const samples = [];
-  for (let i = 0; i < args.runs; i++) {
-    const start = process.hrtime.bigint();
-    for (let m = 0; m < program.machines; m++) wasm.run(program.source);
-    samples.push(Number(process.hrtime.bigint() - start));
+  if (program.time === 'draw') {
+    wasm.timeDraw(program.source); // warmup, as the native runner does
+    for (let i = 0; i < drawRuns; i++) samples.push(wasm.timeDraw(program.source));
+  } else {
+    for (let i = 0; i < args.runs; i++) {
+      const start = process.hrtime.bigint();
+      for (let m = 0; m < program.machines; m++) wasm.run(program.source);
+      samples.push(Number(process.hrtime.bigint() - start));
+    }
   }
   samples.sort((a, b) => a - b);
-  return withPerIteration({ min_ns: samples[0], median_ns: samples[Math.floor(args.runs / 2)] }, program);
+  return withPerIteration({ min_ns: samples[0], median_ns: samples[Math.floor(samples.length / 2)] }, program);
 }
 
 // ---- lua ---------------------------------------------------------------------------------------
@@ -231,6 +263,7 @@ function withPerIteration(timing, program) {
 
 function printTable(current, base) {
   let regressions = 0;
+  let tooFast = 0;
   let overBar = 0;
   const rows = [['program', 'target', 'min ms', 'ns/iter', 'baseline ms', 'change', 'vs lua']];
   for (const [name, r] of Object.entries(current.results)) {
@@ -244,6 +277,9 @@ function printTable(current, base) {
         if (ratio > threshold) {
           change += '  FAIL';
           regressions++;
+        } else if (r.time === 'draw' && ratio < 0.5) {
+          change += '  FAIL';
+          tooFast++;
         }
       } else if (base) {
         change = 'new';
@@ -260,9 +296,9 @@ function printTable(current, base) {
       rows.push([
         name,
         target,
-        round(t.min_ns / 1e6, 2).toString(),
+        ms(t.min_ns),
         t.ns_per_iteration?.toString() ?? '',
-        b ? round(b.min_ns / 1e6, 2).toString() : '',
+        b ? ms(b.min_ns) : '',
         change,
         vsLua,
       ]);
@@ -270,7 +306,7 @@ function printTable(current, base) {
   }
   const widths = rows[0].map((_, c) => Math.max(...rows.map((row) => row[c].length)));
   for (const row of rows) console.log(row.map((cell, c) => cell.padEnd(widths[c])).join('  ').trimEnd());
-  return { regressions, overBar };
+  return { regressions, tooFast, overBar };
 }
 
 // ---- helpers -----------------------------------------------------------------------------------
@@ -293,6 +329,11 @@ function parseArgs(argv) {
 
 function machineName() {
   return `${os.cpus()[0]?.model ?? 'unknown cpu'}, ${os.platform()} ${os.arch()}`;
+}
+
+// Milliseconds, with a third decimal under 1 ms so a collection's time stays readable.
+function ms(ns) {
+  return round(ns / 1e6, ns < 1e6 ? 3 : 2).toString();
 }
 
 function round(n, places) {

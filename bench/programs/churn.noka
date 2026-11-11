@@ -1,0 +1,11 @@
+// String garbage: each pass makes a 52-byte string, so the collector runs every couple of
+// thousand passes. Lua interns strings up to 40 bytes, so 52 bytes makes it allocate too.
+// iterations: 1000000
+// expect: abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz
+i : 0
+s : ""
+while i < 1000000
+  s = "abcdefghijklmnopqrstuvwxyz" + "abcdefghijklmnopqrstuvwxyz"
+  i = i + 1
+end
+s

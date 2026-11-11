@@ -7,11 +7,21 @@
 //!                                 one warmup run, then <runs> timed runs; writes
 //!                                 {"min_ns":N,"median_ns":N} to stderr. Each run evaluates the
 //!                                 program in <machines> fresh machines (default 1).
+//!     runner draw <runs> <file>   like time, but each run evaluates the program untimed in a
+//!                                 fresh machine and times one noka_draw call.
 //!
 //! Timings go to stderr because the VM owns stdout.
 
 const std = @import("std");
 const noka = @import("noka_vm");
+
+// The machine exports aren't `pub`, so link to them by symbol, as a host does.
+const Machine = opaque {};
+const machine_new = @extern(*const fn () callconv(.c) ?*Machine, .{ .name = "noka_machine_new" });
+const machine_free = @extern(*const fn (*Machine) callconv(.c) void, .{ .name = "noka_machine_free" });
+const memory = @extern(*const fn (*Machine) callconv(.c) [*]u8, .{ .name = "noka_memory" });
+const eval = @extern(*const fn (*Machine, usize) callconv(.c) noka.Status, .{ .name = "noka_eval" });
+const draw = @extern(*const fn (*Machine) callconv(.c) noka.Status, .{ .name = "noka_draw" });
 
 pub fn main(init: std.process.Init) !u8 {
     const arena = init.arena.allocator();
@@ -50,11 +60,36 @@ pub fn main(init: std.process.Init) !u8 {
         return 0;
     }
 
+    if (args.len == 4 and std.mem.eql(u8, args[1], "draw")) {
+        const runs = try std.fmt.parseInt(usize, args[2], 10);
+        if (runs == 0) return usage();
+        const source = try readProgram(io, arena, args[3]);
+
+        const samples = try arena.alloc(i96, runs + 1);
+        for (samples) |*sample| {
+            const m = machine_new() orelse return 1;
+            defer machine_free(m);
+            // DISC starts at offset 0 of the block.
+            @memcpy(memory(m)[0..source.len], source);
+            if (eval(m, source.len) == .failed) return 1;
+
+            const start = std.Io.Timestamp.now(io, .awake);
+            if (draw(m) == .failed) return 1;
+            sample.* = start.untilNow(io, .awake).toNanoseconds();
+        }
+
+        // The first run is the warmup.
+        const timed = samples[1..];
+        std.mem.sort(i96, timed, {}, std.sort.asc(i96));
+        std.debug.print("{{\"min_ns\":{d},\"median_ns\":{d}}}\n", .{ timed[0], timed[runs / 2] });
+        return 0;
+    }
+
     return usage();
 }
 
 fn usage() u8 {
-    std.debug.print("usage: runner check <file> | runner time <runs> <file> [machines]\n", .{});
+    std.debug.print("usage: runner check <file> | runner time <runs> <file> [machines] | runner draw <runs> <file>\n", .{});
     return 2;
 }
 
